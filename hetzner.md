@@ -1,0 +1,155 @@
+# Hetzner Server Diagram
+**IP:** 5.161.104.5 — 2 GB RAM · 38 GB disk · Ubuntu
+
+---
+
+## Network topology
+
+```
+                            Internet
+                               │
+                    ┌──────────┴──────────┐
+                    │   nginx (80 / 443)   │
+                    │   TLS via Certbot    │
+                    │   (Let's Encrypt)    │
+                    └──────────┬──────────┘
+                               │
+           ┌───────────────────┼───────────────────┐
+           │                   │                   │
+           ▼                   ▼                   ▼
+assistant.alphatronex   status.alphatronex   vault.alphatronex
+        .com                  .com                .com
+           │                   │                   │
+           ▼                   ▼                   ▼
+    :8000 (Docker)      :3001 (Docker)      :8200 (Docker)
+ ┌─────────────────┐  ┌──────────────┐  ┌───────────────────┐
+ │ personal-       │  │ uptime-kuma  │  │   vaultwarden     │
+ │ assistant       │  │ (monitoring) │  │ (password manager)│
+ │ FastAPI/uvicorn │  └──────────────┘  └───────────────────┘
+ └────────┬────────┘
+          │
+          │  on startup, two daemon threads:
+          │  • APScheduler  — 08:00 daily brief cron
+          │  • TG poller    — Telegram long-poll for WA approvals
+          │
+          │  POST /whatsapp/incoming
+          │◄──────────────────────────────────────────┐
+          │                                           │
+          │                              :3000 (host process)
+          │                         ┌──────────────────────────┐
+          │                         │   whatsapp-bridge        │
+          │                         │   (Node.js / Baileys)    │
+          │                         │   runs directly on host  │
+          │                         └────────────┬─────────────┘
+          │                                      │
+          │                              WhatsApp Web
+          │                              (QR-code auth)
+          │
+          │  LangGraph StateGraph  (/run-now  or  08:00 cron)
+          ▼
+ ┌─────────────────────────────────────────────┐
+ │                                             │
+ │   START                                     │
+ │     │                                       │
+ │     ├──► calendar  ──┐                      │
+ │     ├──► gmail     ──┤                      │
+ │     ├──► youtube   ──┼──► compose ──► deliver ──► END
+ │     └──► reminders ──┘                      │
+ │                                             │
+ └─────────────────────────────────────────────┘
+          │                        │
+          ▼                        ▼
+    Google APIs              Telegram Bot API
+    • Calendar v3            sendMessage
+    • Gmail v1               (+ inline keyboards
+    • YouTube Data v3          for WA approvals)
+          │
+          ▼
+    OpenAI API (gpt-4o-mini)
+    • Gmail summary
+    • YouTube TL;DRs
+    • WhatsApp reply suggestions
+```
+
+---
+
+## FAIS
+
+Migrated from Render (2026-07). Source + Dockerfile/compose live in the FAIS repo;
+this repo only has the nginx vhost. See [nginx/fais.alphatronex.com.conf](./nginx/fais.alphatronex.com.conf).
+
+```
+fais.alphatronex.com
+        │
+        ▼
+  :8010 (Docker, 127.0.0.1 only)
+┌───────────────────┐      ┌────────────────────┐
+│     fais-app       │◄────►│    fais-mongo      │
+│ Node/Express +     │      │ mongo:7            │
+│ Angular (built,    │      │ --wiredTigerCache  │
+│ served as static)  │      │   SizeGB 0.25      │
+│ Playwright/Chromium│      │ not internet-facing│
+│ (PDF affidavits)   │      │ (compose network)  │
+│ mem_limit: 768m    │      │ mem_limit: 450m    │
+└────────────────────┘      └────────────────────┘
+```
+
+Added to a box that was already tight on RAM (2GB total) — mem_limit caps above
+are a starting point set low deliberately (see docker-compose.prod.yml in the FAIS
+repo). Watch `docker stats` after go-live; if fais-app or fais-mongo get OOM-killed,
+or the box swaps heavily, the plan is to rescale the Hetzner box to 4GB
+(console.hetzner.cloud → server → Rescale) rather than raise the caps further.
+
+---
+
+## Services
+
+| Service | Runtime | Internal port | Public URL |
+|---------|---------|--------------|------------|
+| personal-assistant | Docker | 8000 | https://assistant.alphatronex.com |
+| uptime-kuma | Docker | 3001 | https://status.alphatronex.com |
+| vaultwarden | Docker | 8200 | https://vault.alphatronex.com |
+| whatsapp-bridge | Node.js (host) | 3000 | internal only (172.17.0.1:3000) |
+| fais-app | Docker | 8010 | https://fais.alphatronex.com |
+| fais-mongo | Docker | 27017 | internal only (compose network) |
+
+---
+
+## Persistent storage
+
+```
+/opt/assistant/data/
+  agentic.db          — SQLite (all tables below)
+  token.json          — Google OAuth refresh token
+  credentials.json    — Google OAuth client secrets
+
+SQLite tables
+  runs              — one row per morning-brief execution
+  briefs            — rendered markdown body per run
+  reminders         — recurring reminders (managed via /settings)
+  seen_items        — dedup log for YouTube videos
+  app_settings      — feature flags (gmail_enabled, youtube_enabled)
+  youtube_channels  — channel list (managed via /settings)
+  pending_replies   — WhatsApp DMs awaiting Telegram approval
+```
+
+FAIS:
+
+```
+Docker volume: fais_mongo_data  →  /data/db (fais-mongo container)
+server/.env.production            — secrets (JWT, SSN key, SMTP, OpenAI, B2, AWS); git-ignored, not in this repo
+```
+
+---
+
+## Outbound traffic
+
+| Destination | Purpose |
+|-------------|---------|
+| `googleapis.com` | Calendar, Gmail, YouTube Data, OAuth refresh |
+| `api.telegram.org` | Delivery + long-poll for WA approvals |
+| `api.openai.com` | Gmail summary, YouTube TL;DRs, WA reply suggestions (personal-assistant); AI reports (FAIS, optional) |
+| `172.17.0.1:3000` | WhatsApp bridge (Docker → host, local only) |
+| `s3.*.backblazeb2.com` | FAIS document storage (optional, if B2_* configured) |
+| `textract.*.amazonaws.com` | FAIS document OCR via Textract (optional, if DOCUMENT_INTAKE_TEXTRACT enabled) |
+| SMTP host (configurable) | FAIS invite + password-reset email (optional) |
