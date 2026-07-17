@@ -85,7 +85,7 @@ fais.alphatronex.com
   :8010 (Docker, 127.0.0.1 only)
 ┌───────────────────┐      ┌────────────────────┐
 │     fais-app       │◄────►│    fais-mongo      │
-│ Node/Express +     │      │ mongo:7            │
+│ Node/Express +     │      │ mongo:8            │
 │ Angular (built,    │      │ --wiredTigerCache  │
 │ served as static)  │      │   SizeGB 0.25      │
 │ Playwright/Chromium│      │ not internet-facing│
@@ -99,6 +99,21 @@ are a starting point set low deliberately (see docker-compose.prod.yml in the FA
 repo). Watch `docker stats` after go-live; if fais-app or fais-mongo get OOM-killed,
 or the box swaps heavily, the plan is to rescale the Hetzner box to 4GB
 (console.hetzner.cloud → server → Rescale) rather than raise the caps further.
+
+---
+
+## Root domain (splash page)
+
+`alphatronex.com` / `www.alphatronex.com` is the odd one out: it's served as
+static files directly by nginx from `/var/www/alphatronex` on the host, not
+proxied to a container like every other vhost above. Source lives in
+[splash/](./splash/) in this repo; deploy with:
+
+```
+rsync -a splash/ hetzner:/var/www/alphatronex/
+```
+
+See [nginx/alphatronex.com.conf](./nginx/alphatronex.com.conf) for the vhost.
 
 ---
 
