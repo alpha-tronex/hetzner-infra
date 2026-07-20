@@ -11,3 +11,4 @@ Currently hosted:
 - uptime-kuma
 - vaultwarden
 - FAIS (migrating from Render — source: FAIS repo)
+- Real Dosing / omega-3 prototype (static site, source: supplement-price-app repo)
