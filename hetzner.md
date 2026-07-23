@@ -104,25 +104,50 @@ or the box swaps heavily, the plan is to rescale the Hetzner box to 4GB
 
 ## Real Dosing (supplement price comparison)
 
-Angular SSG site (7 category pages — omega-3, creatine, vitamin D3, vitamin
-C, calcium, protein, plus the landing page), same non-Docker pattern as the
-root splash page below — served directly by nginx from
+Angular SSG site (9 tracked supplement categories), same non-Docker pattern
+as the root splash page below — served directly by nginx from
 `/var/www/realdosing`, not proxied to a container; no Node runtime at
 request time (every route is prerendered to static HTML at build time).
 Source lives in the `supplement-price-app` repo (`app/` — Angular 20
 workspace with `@angular/ssr` prerendering); this repo only has the nginx
-vhosts, matching the FAIS source-lives-elsewhere pattern above. Deploy with:
+vhosts and systemd units, matching the FAIS source-lives-elsewhere pattern.
 
-```
-python3 scripts/build_json_data.py   # regenerates app/public/data/*.json from data/*.csv
-cd app && npm ci && npm run build
-rsync -a --delete app/dist/app/browser/ hetzner:/var/www/realdosing/
-```
+**Deploy** — automated via GitHub Actions (`auto-price-deploy.yml`) on every
+push to `main`. No manual rsync needed. The workflow runs `ng build` and
+rsyncs `app/dist/app/browser/` to `/var/www/realdosing/`.
 
 The vhost ([nginx/dosinghub.com.conf](./nginx/dosinghub.com.conf)) also
 301-redirects the pre-migration flat `.html` URLs (`vitamin-d.html`, etc.)
 to their new clean-path equivalents, and points `error_page 404` at the
-prerendered `/404/index.html` shell.
+prerendered `/404/index.html` shell. It also proxies `/api/price-request`
+to the agentic pricing intake service on loopback:8787.
+
+**Agentic pricing pipeline** (added 2026-07-22) — two systemd units in
+`systemd/` handle automated pricing of DSLD search hits that come back
+unpriced, triggered by the pricing-request modal:
+
+| Unit | Type | Purpose |
+|------|------|---------|
+| `realdosing-pricing-intake.socket` | socket | Binds 127.0.0.1:8787, socket-activates the intake service on first connection (~4KB idle RAM) |
+| `realdosing-pricing-intake.service` | simple | `scripts/vps/intake.py` — validates POST payload, deduplicates, appends to queue |
+| `realdosing-pricing-worker.service` | oneshot | `scripts/vps/worker.py` — drains queue: DSLD fetch → category match → Anthropic web_search → CSV write → git push |
+| `realdosing-pricing-worker.timer` | timer | Fires the worker every 15 minutes (`OnUnitActiveSec=15min`) |
+
+Runtime files live in `/opt/realdosing-pricing/`: `queue.jsonl`,
+`worker_state.json`, `worker_audit.jsonl`, and `env` (secrets file, mode
+600, owned by `realdosing` service user — contains `ANTHROPIC_API_KEY` and
+`PRICE_REQUEST_GIT_PUSH_URL`; never committed).
+
+The repo checkout used by the worker lives at
+`/opt/realdosing/supplement-price-app/` (owned by `realdosing:realdosing`).
+
+To check service health:
+```bash
+sudo systemctl status realdosing-pricing-intake.socket
+sudo systemctl list-timers realdosing-pricing-worker.timer
+journalctl -u realdosing-pricing-worker -n 50
+cat /opt/realdosing-pricing/worker_audit.jsonl | tail -5
+```
 
 Canonical domain is **dosinghub.com** (purchased 2026-07-20, DNS on
 Cloudflare, cert via Certbot covering `dosinghub.com` + `www.dosinghub.com`).
