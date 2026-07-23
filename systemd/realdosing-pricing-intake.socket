@@ -1,0 +1,23 @@
+# Real Dosing pricing-request intake socket (Phase 4, agentic-pricing-plan.md)
+# Placed in /etc/systemd/system/ on the Hetzner VPS.
+#
+# systemd binds this socket and hands it to
+# realdosing-pricing-intake.service as fd 3 on first connection (socket
+# activation -- near-zero idle RAM since the Python process only runs when
+# a connection actually arrives, not continuously). nginx proxies
+# /api/price-request -> 127.0.0.1:8787 (see nginx/dosinghub.com.conf).
+#
+# Port 8787 is only bound on 127.0.0.1 (loopback) -- never exposed directly
+# to the internet; nginx is the only listener on 443/80.
+
+[Unit]
+Description=Real Dosing pricing-request intake socket
+
+[Socket]
+ListenStream=127.0.0.1:8787
+# Pass connections as a non-blocking fd; intake.py sets its own blocking
+# mode on the socket after receiving it via LISTEN_PID/LISTEN_FDS.
+NoDelay=true
+
+[Install]
+WantedBy=sockets.target

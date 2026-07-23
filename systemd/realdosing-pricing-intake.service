@@ -1,0 +1,41 @@
+# Real Dosing pricing-request intake HTTP server (Phase 4, agentic-pricing-plan.md)
+# Placed in /etc/systemd/system/ on the Hetzner VPS.
+#
+# Socket-activated by realdosing-pricing-intake.socket -- systemd starts
+# this service on the first connection and hands it the already-bound
+# socket on fd 3 (LISTEN_PID + LISTEN_FDS protocol). The Python process
+# reads those env vars and skips binding its own socket. See
+# scripts/vps/intake.py for the implementation.
+#
+# Secrets: ANTHROPIC_API_KEY is not used by intake.py (it never calls the
+# LLM -- it just validates + queues). The EnvironmentFile is referenced
+# here anyway so future additions don't require a unit-file edit.
+
+[Unit]
+Description=Real Dosing pricing-request intake HTTP server
+After=network.target
+Requires=realdosing-pricing-intake.socket
+
+[Service]
+Type=simple
+User=realdosing
+Group=realdosing
+
+WorkingDirectory=/opt/realdosing/supplement-price-app
+ExecStart=/usr/bin/python3 scripts/vps/intake.py
+
+Environment=PRICE_REQUEST_QUEUE_PATH=/opt/realdosing-pricing/queue.jsonl
+Environment=PRICE_INDEX_PATH=/opt/realdosing/supplement-price-app/app/public/data/price-index.json
+
+# Secrets (ANTHROPIC_API_KEY etc.) -- the "-" prefix makes the file optional
+# so the service starts even if the file isn't present yet.
+EnvironmentFile=-/opt/realdosing-pricing/env
+
+Restart=on-failure
+RestartSec=5s
+
+# Intake is near-idle; keep its RAM ceiling low.
+MemoryMax=64M
+
+[Install]
+WantedBy=multi-user.target

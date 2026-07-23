@@ -1,0 +1,52 @@
+# Real Dosing pricing-request worker (Phase 4, agentic-pricing-plan.md)
+# Placed in /etc/systemd/system/ on the Hetzner VPS.
+#
+# Oneshot service triggered by realdosing-pricing-worker.timer (every 15
+# min). Reads /opt/realdosing-pricing/queue.jsonl, prices unprocessed
+# entries via the Anthropic Messages API + web_search, writes CSVs, and
+# git-pushes to trigger Phase 5's auto-price-deploy.yml GitHub Actions
+# workflow. See scripts/vps/worker.py for the implementation.
+#
+# Memory: the Anthropic API call + Python JSON/CSV work is lightweight
+# (<100 MB in practice), but we give 512 MB headroom for the git clone
+# (supplementary Python imports + git objects in memory during push).
+# Tight enough to not crowd the other 5 services on the 2 GB box, but
+# enough for the worker not to OOM-kill mid-push.
+#
+# Secrets: ANTHROPIC_API_KEY and PRICE_REQUEST_GIT_PUSH_URL must be set
+# in /opt/realdosing-pricing/env by the operator (not by this repository --
+# see env.example in this directory). Do not commit real credentials.
+
+[Unit]
+Description=Real Dosing pricing-request worker (one-shot)
+After=network.target
+
+[Service]
+Type=oneshot
+User=realdosing
+Group=realdosing
+
+WorkingDirectory=/opt/realdosing/supplement-price-app
+ExecStart=/usr/bin/python3 scripts/vps/worker.py
+
+Environment=PRICE_REQUEST_QUEUE_PATH=/opt/realdosing-pricing/queue.jsonl
+Environment=PRICE_REQUEST_STATE_PATH=/opt/realdosing-pricing/worker_state.json
+Environment=PRICE_REQUEST_WORKER_AUDIT_LOG_PATH=/opt/realdosing-pricing/worker_audit.jsonl
+# HOME must be set explicitly for oneshot services so git can find the
+# credential store / SSH config under the service user's home directory.
+Environment=HOME=/home/realdosing
+
+# Secrets -- the "-" prefix makes this optional so a misconfigured/missing
+# env file surfaces as a failed API call (logged in worker_audit.jsonl)
+# rather than the service failing to start at all.
+EnvironmentFile=-/opt/realdosing-pricing/env
+
+MemoryMax=512M
+
+# Don't restart automatically on failure -- the timer fires again in 15 min,
+# which is the natural retry window.  A persistent failure will show up in
+# `journalctl -u realdosing-pricing-worker` + worker_audit.jsonl.
+Restart=no
+
+[Install]
+WantedBy=multi-user.target

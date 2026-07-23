@@ -1,0 +1,27 @@
+# Real Dosing pricing-request worker timer (Phase 4, agentic-pricing-plan.md)
+# Placed in /etc/systemd/system/ on the Hetzner VPS.
+#
+# Fires realdosing-pricing-worker.service every 15 minutes.  15 min is
+# the right interval here: the queue is only fed by real user submissions
+# through the live pricing-request modal (low volume), the LLM call takes
+# ~10-30 seconds per product, and git push + GitHub Actions deploy adds
+# another minute or so -- so a 15-min latency from "user submitted" to
+# "price appears on site" is acceptable and doesn't waste API budget on
+# empty-queue no-op runs.
+#
+# OnBootSec=2min: give the network and git/python environment a moment to
+# settle after a VPS reboot before the first worker run.
+
+[Unit]
+Description=Run Real Dosing pricing-request worker every 15 minutes
+
+[Timer]
+OnBootSec=2min
+OnUnitActiveSec=15min
+Unit=realdosing-pricing-worker.service
+# Persist last-run time across reboots so a reboot mid-interval doesn't
+# result in a double-fire immediately after coming back up.
+Persistent=true
+
+[Install]
+WantedBy=timers.target
