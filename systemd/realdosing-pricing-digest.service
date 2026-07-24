@@ -1,0 +1,33 @@
+# Real Dosing admin digest emailer
+# Placed in /etc/systemd/system/ on the Hetzner VPS.
+#
+# One-shot service triggered once daily by realdosing-pricing-digest.timer.
+# Reads worker_audit.jsonl for the past 24 h and sends a summary email to
+# ADMIN_EMAIL via Resend. Silently exits without sending if there were no
+# audit entries in the window.  See scripts/vps/digest.py for implementation.
+
+[Unit]
+Description=Real Dosing admin digest email (one-shot)
+After=network.target
+
+[Service]
+Type=oneshot
+User=realdosing
+Group=realdosing
+
+WorkingDirectory=/opt/realdosing/supplement-price-app
+ExecStart=/usr/bin/python3 scripts/vps/digest.py
+
+Environment=PRICE_REQUEST_QUEUE_PATH=/opt/realdosing-pricing/queue.jsonl
+Environment=PRICE_REQUEST_WORKER_AUDIT_LOG_PATH=/opt/realdosing-pricing/worker_audit.jsonl
+Environment=HOME=/home/realdosing
+
+# Secrets -- "-" prefix makes this optional (missing env file = no email sent,
+# not a service-start failure).
+EnvironmentFile=-/opt/realdosing-pricing/env
+
+MemoryMax=64M
+Restart=no
+
+[Install]
+WantedBy=multi-user.target

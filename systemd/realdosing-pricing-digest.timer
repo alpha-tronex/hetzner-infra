@@ -1,0 +1,18 @@
+# Real Dosing admin digest email timer
+# Placed in /etc/systemd/system/ on the Hetzner VPS.
+#
+# Fires realdosing-pricing-digest.service once per day at 08:00 UTC.
+# Persistent=true means a reboot that spans the 08:00 window will still
+# send the digest shortly after the VPS comes back up, rather than
+# silently skipping it.
+
+[Unit]
+Description=Send Real Dosing admin digest email daily at 08:00 UTC
+
+[Timer]
+OnCalendar=*-*-* 08:00:00 UTC
+Persistent=true
+Unit=realdosing-pricing-digest.service
+
+[Install]
+WantedBy=timers.target
