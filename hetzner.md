@@ -40,6 +40,8 @@ assistant.alphatronex   status.alphatronex   vault.alphatronex
           │                         │   whatsapp-bridge        │
           │                         │   (Node.js / Baileys)    │
           │                         │   runs directly on host  │
+          │                         │   → residential proxy    │
+          │                         │     (see note below)     │
           │                         └────────────┬─────────────┘
           │                                      │
           │                              WhatsApp Web
@@ -176,6 +178,37 @@ See [nginx/alphatronex.com.conf](./nginx/alphatronex.com.conf) for the vhost.
 
 ---
 
+## WhatsApp bridge — residential proxy (added 2026-08-04)
+
+WhatsApp started hard-rejecting connections from this box's IP (`Connection
+closed. Code: 405` on every attempt, including a completely fresh,
+unauthenticated session — confirmed via a side-by-side test that the same
+code connects cleanly from a residential IP). Root cause: WhatsApp blocking
+the Hetzner datacenter IP range, not a session/auth problem.
+
+Fix: the bridge (source in the Personal Assistant repo's `whatsapp_service/`)
+now routes its WebSocket through a static-session residential proxy
+(IPRoyal) via a `PROXY_URL` env var wired into Baileys' socket `agent`
+option. Set on the host via `pm2 start ... ` (not a `.env` file — matches
+this app's existing all-env-vars pattern) and persisted with `pm2 save`
+into `/root/.pm2/dump.pm2`.
+
+**Maintenance — the sticky proxy session expires every 7 days**
+(`_lifetime-7d`, IPRoyal's max). When it does, the exit IP changes and the
+bridge will need `PROXY_URL` regenerated with a fresh `_session-<id>` and
+redeployed the same way, or it'll eventually drift back toward the same
+kind of block. No automated renewal exists yet — check
+`pm2 logs whatsapp-bridge` for a resumed `Code: 405`/reconnect loop as the
+symptom if this lapses.
+
+Bandwidth is being tracked with `nethogs -t -d 60` (installed 2026-08-04,
+logging to `/tmp/nethogs-wa.log` on the host) to size actual proxy cost —
+IPRoyal's rotating-pool product is billed per-GB ($1.75/GB), so real usage
+data determines whether a flat-rate static-IP plan would be cheaper long
+term.
+
+---
+
 ## Services
 
 | Service | Runtime | Internal port | Public URL |
@@ -225,6 +258,7 @@ server/.env.production            — secrets (JWT, SSN key, SMTP, OpenAI, B2, A
 | `api.telegram.org` | Delivery + long-poll for WA approvals |
 | `api.openai.com` | Gmail summary, YouTube TL;DRs, WA reply suggestions (personal-assistant); AI reports (FAIS, optional) |
 | `172.17.0.1:3000` | WhatsApp bridge (Docker → host, local only) |
+| `geo.iproyal.com:12321` | WhatsApp bridge → residential proxy → WhatsApp (see note above; datacenter IP is blocked by WA directly) |
 | `s3.*.backblazeb2.com` | FAIS document storage (optional, if B2_* configured) |
 | `textract.*.amazonaws.com` | FAIS document OCR via Textract (optional, if DOCUMENT_INTAKE_TEXTRACT enabled) |
 | SMTP host (configurable) | FAIS invite + password-reset email (optional) |
