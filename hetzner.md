@@ -194,12 +194,19 @@ this app's existing all-env-vars pattern) and persisted with `pm2 save`
 into `/root/.pm2/dump.pm2`.
 
 **Maintenance — the sticky proxy session expires every 7 days**
-(`_lifetime-7d`, IPRoyal's max). When it does, the exit IP changes and the
-bridge will need `PROXY_URL` regenerated with a fresh `_session-<id>` and
-redeployed the same way, or it'll eventually drift back toward the same
-kind of block. No automated renewal exists yet — check
-`pm2 logs whatsapp-bridge` for a resumed `Code: 405`/reconnect loop as the
-symptom if this lapses.
+(`_lifetime-7d`, IPRoyal's max). This is now automated: a systemd timer
+(`whatsapp-proxy-renew.timer`, fires every 6 days — one day inside the
+7-day cap) generates a fresh session, sanity-checks the new exit IP is
+US and non-datacenter, and only then swaps it into the live pm2 process;
+on any failure it leaves the running bridge untouched. Success/failure
+alerts go to the same Telegram bot personal-assistant already uses for
+daily briefs. Source (script + unit files) lives in the Personal
+Assistant repo's `whatsapp_service/systemd/`; the real credentials file
+(`proxy-renew.env`, template in that same dir) exists only on the server
+at `/opt/whatsapp-bridge/proxy-renew.env`, mode 600, never committed. If
+alerts stop arriving or `pm2 logs whatsapp-bridge` shows a resumed
+`Code: 405`/reconnect loop, check `sudo systemctl status
+whatsapp-proxy-renew.timer` and `/var/log/whatsapp-proxy-renew.log` first.
 
 Bandwidth is being tracked with `nethogs -t -d 60` (installed 2026-08-04,
 logging to `/tmp/nethogs-wa.log` on the host) to size actual proxy cost —
