@@ -12,3 +12,4 @@ Currently hosted:
 - vaultwarden
 - FAIS (migrating from Render — source: FAIS repo)
 - Real Dosing — supplement price comparison (static site, https://dosinghub.com, source: supplement-price-app repo)
+- Quiz Master — quiz app (migrating from Render, https://quizmaster.alphatronex.com, source: quizzes repo)

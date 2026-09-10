@@ -104,6 +104,38 @@ or the box swaps heavily, the plan is to rescale the Hetzner box to 4GB
 
 ---
 
+## Quiz Master
+
+Migrating from Render (2026-09). Source + Dockerfile/docker-compose.prod.yml
+live in the `quizzes` repo; this repo only has the nginx vhost. See
+[nginx/quizmaster.alphatronex.com.conf](./nginx/quizmaster.alphatronex.com.conf).
+
+```
+quizmaster.alphatronex.com
+        │
+        ▼
+  :8020 (Docker, 127.0.0.1 only)
+┌─────────────────────┐      ┌─────────────────────┐
+│    quizmaster-app    │◄────►│   quizmaster-mongo   │
+│  Node/Express +      │      │  mongo:8             │
+│  Angular (built,     │      │  --wiredTigerCache   │
+│  served as static)   │      │    SizeGB 0.25       │
+│  mem_limit: 256m     │      │  not internet-facing │
+└─────────────────────┘      │  mem_limit: 400m     │
+                              └─────────────────────┘
+```
+
+**RAM note:** this box already runs tight at 2GB total (fais-app +
+fais-mongo alone use ~1.2GB — see the FAIS section above). Adding
+quizmaster-app + quizmaster-mongo (~656MB combined mem_limit) pushes total
+committed memory close to the box's ceiling. Check `free -h` and `docker
+stats --no-stream` before bringing these containers up; if the box is
+already swapping or these get OOM-killed, rescale to 4GB
+(console.hetzner.cloud → server → Rescale) rather than raising limits
+further on a box that's already tight.
+
+---
+
 ## Real Dosing (supplement price comparison)
 
 Angular SSG site (9 tracked supplement categories), same non-Docker pattern
@@ -227,6 +259,8 @@ term.
 | fais-app | Docker | 8010 | https://fais.alphatronex.com |
 | fais-mongo | Docker | 27017 | internal only (compose network) |
 | realdosing (static) | nginx (no container) | — | https://dosinghub.com |
+| quizmaster-app | Docker | 8020 | https://quizmaster.alphatronex.com |
+| quizmaster-mongo | Docker | 27017 | internal only (compose network) |
 
 ---
 
@@ -253,6 +287,13 @@ FAIS:
 ```
 Docker volume: fais_mongo_data  →  /data/db (fais-mongo container)
 server/.env.production            — secrets (JWT, SSN key, SMTP, OpenAI, B2, AWS); git-ignored, not in this repo
+```
+
+Quiz Master:
+
+```
+Docker volume: quizmaster_mongo_data  →  /data/db (quizmaster-mongo container)
+server/.env.production                  — secrets (JWT_SECRET); git-ignored, not in this repo
 ```
 
 ---
