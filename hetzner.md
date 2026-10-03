@@ -1,5 +1,23 @@
 # Hetzner Server Diagram
-**IP:** 5.161.104.5 — 2 GB RAM · 38 GB disk · Ubuntu
+**IP:** 5.161.104.5 — 3 vCPU · 4 GB RAM · 40 GB disk (local) · Ubuntu
+
+## Server plan (as of 2026-09-22)
+
+| Spec | Value |
+|------|-------|
+| vCPU | 3 |
+| RAM | 4 GB |
+| Disk (local) | 40 GB |
+| Traffic out | 2 TB/mo included (0 TB used as of this writing) |
+| Cost | ~37.49/mo (console shows ~20.29 usage so far this billing period) |
+
+Rescaled up from the original 2 GB RAM plan (see the FAIS and Quiz Master
+sections below, written when the box was still on 2 GB — the "rescale to
+4GB" contingency they mention has since happened). Headroom is meaningfully
+better now, but re-check `free -h` / `docker stats --no-stream` after any
+RAM-heavy change (new service, load/stress test) rather than assuming it's
+still fine — those sections' mem_limit caps were tuned for the old 2 GB
+ceiling and haven't been revisited since the rescale.
 
 ---
 
@@ -96,11 +114,14 @@ fais.alphatronex.com
 └────────────────────┘      └────────────────────┘
 ```
 
-Added to a box that was already tight on RAM (2GB total) — mem_limit caps above
-are a starting point set low deliberately (see docker-compose.prod.yml in the FAIS
-repo). Watch `docker stats` after go-live; if fais-app or fais-mongo get OOM-killed,
-or the box swaps heavily, the plan is to rescale the Hetzner box to 4GB
-(console.hetzner.cloud → server → Rescale) rather than raise the caps further.
+Added to a box that was tight on RAM back when this ran on the original 2GB
+plan — mem_limit caps above were a starting point set low deliberately (see
+docker-compose.prod.yml in the FAIS repo). The box has since been rescaled to
+4GB / 3 vCPU (see Server plan above), so headroom is meaningfully better now;
+the caps themselves haven't been revisited since the rescale. Watch
+`docker stats` after any future RAM-heavy change — if fais-app or fais-mongo
+get OOM-killed, or the box swaps heavily, raise the specific service's
+mem_limit rather than assuming another rescale is needed.
 
 ---
 
@@ -109,6 +130,19 @@ or the box swaps heavily, the plan is to rescale the Hetzner box to 4GB
 Migrating from Render (2026-09). Source + Dockerfile/docker-compose.prod.yml
 live in the `quizzes` repo; this repo only has the nginx vhost. See
 [nginx/quizmaster.alphatronex.com.conf](./nginx/quizmaster.alphatronex.com.conf).
+
+**CD (2026-09-29):** `quizzes/.github/workflows/ci.yml` deploys automatically
+on every push to `main` that passes checks (lint, typecheck, Angular/Karma
+tests, backend Jest tests). Deploy step SSHes in with a restricted,
+forced-command key (`command="/opt/quizmaster/deploy.sh",restrict` in
+`alphathiam`'s `authorized_keys`) that can only run
+`/opt/quizmaster/deploy.sh` (git pull + `docker compose up -d --build` +
+local health check against `/privacy`), then the GitHub runner smoke-tests
+the public URL too. Secrets: `DEPLOY_SSH_KEY`, `DEPLOY_HOST_KEY` on the
+`quizzes` repo. Failure mode: checks or deploy failing leaves production on
+the previous version — nothing is torn down mid-deploy. Rollback: `ssh
+hetzner`, `cd /opt/quizmaster/quizzes`, `git reset --hard <previous-sha>`,
+re-run `/opt/quizmaster/deploy.sh` by hand.
 
 ```
 quizmaster.alphatronex.com
@@ -125,14 +159,69 @@ quizmaster.alphatronex.com
                               └─────────────────────┘
 ```
 
-**RAM note:** this box already runs tight at 2GB total (fais-app +
-fais-mongo alone use ~1.2GB — see the FAIS section above). Adding
-quizmaster-app + quizmaster-mongo (~656MB combined mem_limit) pushes total
-committed memory close to the box's ceiling. Check `free -h` and `docker
-stats --no-stream` before bringing these containers up; if the box is
-already swapping or these get OOM-killed, rescale to 4GB
-(console.hetzner.cloud → server → Rescale) rather than raising limits
-further on a box that's already tight.
+**RAM note:** written back when this box ran on the original 2GB plan —
+fais-app + fais-mongo alone used ~1.2GB (see the FAIS section above), and
+quizmaster-app + quizmaster-mongo (~656MB combined mem_limit) pushed total
+committed memory close to the ceiling. The box has since been rescaled to
+4GB / 3 vCPU (see Server plan above), so there's meaningfully more headroom
+now. Still worth checking `free -h` and `docker stats --no-stream` after any
+significant change (new containers, a load/stress test) rather than assuming
+it's fine — the mem_limit values above haven't been revisited since the
+rescale.
+
+---
+
+## TTS Service (Wolof and Bambara voices)
+
+Added 2026-10-03 for the Language Translator app. OpenAI's voices don't cover
+Wolof or Bambara, so the translator API (Next.js on **Vercel**) sends the
+translated text here and gets an MP3 back. Phones never call this service
+directly. Source + Dockerfile/docker-compose.prod.yml live in the
+`tts-service` repo (`alpha-tronex/tts-service`, local folder `TTS Service`);
+this repo only has the nginx vhost. See
+[nginx/tts.alphatronex.com.conf](./nginx/tts.alphatronex.com.conf).
+
+```
+Language Translator API (Vercel)
+        │  POST /speak  {lang, text}   header X-TTS-Key
+        ▼
+tts.alphatronex.com
+        │   nginx: only /speak (rate-limited 5 r/s) and /health; everything else 404
+        ▼
+  :8300 (Docker, 127.0.0.1 only)
+┌──────────────────────────────┐
+│         tts-service           │
+│ Python 3.11 / FastAPI /       │
+│ uvicorn (1 worker), CPU torch │
+│ wo: SpeechT5 (MIT)            │
+│ bm: Meta MMS VITS (CC-BY-NC)  │
+│ mem_limit: 1500m              │
+└──────────────────────────────┘
+```
+
+- **Code on the server:** `/opt/tts-service/tts-service`.
+- **Secret:** `.env.production` there (mode 600, never committed) holds
+  `TTS_SHARED_SECRET`. The same value is `TTS_SERVICE_KEY` in the Vercel
+  project for the translator API, next to `TTS_SERVICE_URL`. Changing one
+  means changing the other and redeploying the API.
+- **Models:** downloaded from Hugging Face on the first start into the
+  `tts-models` Docker volume (about 1 GB); later starts need no network.
+- **Deploy:** manual, per `DEPLOY.md` in the `tts-service` repo
+  (`git pull`, `docker compose -f docker-compose.prod.yml build`, `up -d`).
+  The repo's GitHub Actions workflow only runs tests; there is no CD yet.
+- **Health:** `curl -s https://tts.alphatronex.com/health` →
+  `{"status":"ok","languages":["bm","wo"]}`. `docker logs tts-service` shows
+  one JSON line per request (language, characters, ms, cached), never the text.
+- **If it is down:** the translator still returns the translation and the app
+  shows "Audio temporarily unavailable"; only Wolof and Bambara audio is lost.
+- **Licence:** the Bambara model is non-commercial. Fine while the app is free
+  with no ads; replace it before the app ever charges.
+
+**RAM note (2026-10-03):** before this service was added the box had 1.9 GB
+available with 736 MB of swap already in use, so the cap was set at 1500m
+instead of the 2 GB first planned. This is the largest single consumer on the
+box. If `free -h` shows available memory under ~300 MB or swap climbing well
+past 1 GB, rescale to the 8 GB plan rather than squeezing the other caps.
 
 ---
 
@@ -261,6 +350,7 @@ term.
 | realdosing (static) | nginx (no container) | — | https://dosinghub.com |
 | quizmaster-app | Docker | 8020 | https://quizmaster.alphatronex.com |
 | quizmaster-mongo | Docker | 27017 | internal only (compose network) |
+| tts-service | Docker | 8300 | https://tts.alphatronex.com (only `/speak` and `/health`) |
 
 ---
 
@@ -289,6 +379,13 @@ Docker volume: fais_mongo_data  →  /data/db (fais-mongo container)
 server/.env.production            — secrets (JWT, SSN key, SMTP, OpenAI, B2, AWS); git-ignored, not in this repo
 ```
 
+TTS Service:
+
+```
+Docker volume: tts-models  →  /models (tts-service container; Hugging Face model cache, ~1 GB)
+.env.production               — secret (TTS_SHARED_SECRET); git-ignored, not in this repo
+```
+
 Quiz Master:
 
 ```
@@ -310,3 +407,4 @@ server/.env.production                  — secrets (JWT_SECRET); git-ignored, n
 | `s3.*.backblazeb2.com` | FAIS document storage (optional, if B2_* configured) |
 | `textract.*.amazonaws.com` | FAIS document OCR via Textract (optional, if DOCUMENT_INTAKE_TEXTRACT enabled) |
 | SMTP host (configurable) | FAIS invite + password-reset email (optional) |
+| `huggingface.co` | tts-service model download, first start only (cached in the `tts-models` volume afterwards) |
