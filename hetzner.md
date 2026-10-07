@@ -299,6 +299,28 @@ See [nginx/alphatronex.com.conf](./nginx/alphatronex.com.conf) for the vhost.
 
 ---
 
+## Personal assistant — CD (added 2026-10-07)
+
+Until 2026-10 `/opt/assistant` was a hand-copied `backend/` folder and the
+container a bare `docker run`. It is now deployed from git:
+`Personal-Assistant/.github/workflows/ci.yml` runs ruff, pytest, a
+testability audit and shellcheck on every push, and on `main` SSHes in with a
+forced-command key (`command="/opt/assistant/deploy.sh",restrict` in
+`alphathiam`'s `authorized_keys`). `deploy.sh` does `git reset --hard
+origin/main` in `/opt/assistant/repo`, then `docker compose -f
+backend/docker-compose.prod.yml` build + `up -d`, and waits until `/healthz`
+reports the new short SHA. The runner then checks the same thing on the
+public URL. Secret: `DEPLOY_SSH_KEY` (raw PEM) on the repo.
+
+State stays outside the checkout and is mounted in: `/opt/assistant/.env`,
+`config/`, `data/`. The old top-level copies of `app/`, `Dockerfile` etc. in
+`/opt/assistant/` are now unused. The container has `mem_limit: 768m`
+(steady state ~190 MiB). The WhatsApp bridge and its systemd units are **not**
+deployed by this pipeline. Setup, rollback and schema-change notes:
+`Personal-Assistant/backend/deploy/README.md`.
+
+---
+
 ## WhatsApp bridge — residential proxy (added 2026-08-04)
 
 WhatsApp started hard-rejecting connections from this box's IP (`Connection
