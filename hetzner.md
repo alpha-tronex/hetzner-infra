@@ -312,14 +312,26 @@ now routes its WebSocket through a static-session residential proxy
 (IPRoyal) via a `PROXY_URL` env var wired into Baileys' socket `agent`
 option. Set on the host via `pm2 start ... ` (not a `.env` file — matches
 this app's existing all-env-vars pattern) and persisted with `pm2 save`
-into `/root/.pm2/dump.pm2`.
+into `/home/alphathiam/.pm2/dump.pm2`.
+
+**The bridge runs under alphathiam's pm2, not root's.** `pm2-alphathiam.service`
+resurrects it at boot. Never run `sudo pm2 ...` for the bridge: root has its
+own pm2 home (`/root/.pm2`), so that starts a second, root-owned bridge.
+That happened Sep–Oct 2026. The renewal script restarted a root copy that
+couldn't take :3000, its health check hit the real (unproxied) bridge and
+reported success, and root-owned files in `auth/` caused thousands of
+`EACCES ... creds.json` errors plus constant 500/428 disconnects. Quick
+check: `pm2 env 0 | grep -c PROXY_URL` (as alphathiam) should print 1, and
+`sudo find /opt/whatsapp-bridge/auth ! -user alphathiam | wc -l` should print 0.
 
 **Maintenance — the sticky proxy session expires every 7 days**
 (`_lifetime-7d`, IPRoyal's max). This is now automated: a systemd timer
 (`whatsapp-proxy-renew.timer`, fires every 6 days — one day inside the
 7-day cap) generates a fresh session, sanity-checks the new exit IP is
-US and non-datacenter, and only then swaps it into the live pm2 process;
-on any failure it leaves the running bridge untouched. Success/failure
+US, and only then swaps it into the live pm2 process; if the new session
+fails its checks it leaves the running bridge untouched. After the restart
+it verifies the new pid owns :3000, carries the new session in its env and
+holds a connection to the proxy before reporting success. Success/failure
 alerts go to the same Telegram bot personal-assistant already uses for
 daily briefs. Source (script + unit files) lives in the Personal
 Assistant repo's `whatsapp_service/systemd/`; the real credentials file
@@ -329,11 +341,12 @@ alerts stop arriving or `pm2 logs whatsapp-bridge` shows a resumed
 `Code: 405`/reconnect loop, check `sudo systemctl status
 whatsapp-proxy-renew.timer` and `/var/log/whatsapp-proxy-renew.log` first.
 
-Bandwidth is being tracked with `nethogs -t -d 60` (installed 2026-08-04,
-logging to `/tmp/nethogs-wa.log` on the host) to size actual proxy cost —
-IPRoyal's rotating-pool product is billed per-GB ($1.75/GB), so real usage
-data determines whether a flat-rate static-IP plan would be cheaper long
-term.
+Bandwidth is tracked by `whatsapp-nethogs.service` (`nethogs -t -d 60`,
+bridge lines only, logging to `/var/log/nethogs-wa.log`) to size actual
+proxy cost — IPRoyal's rotating-pool product is billed per-GB ($1.75/GB).
+The first 3.8-day sample (Aug 2026) came to ~0.05 GB/month (~$0.09/month).
+`whatsapp-bandwidth-report.timer` sends a one-off Telegram report 7 days
+after it's enabled.
 
 ---
 
