@@ -10,7 +10,9 @@
 # Memory: the Anthropic API call + Python JSON/CSV work is lightweight
 # (<100 MB in practice), but we give 512 MB headroom for the git clone
 # (supplementary Python imports + git objects in memory during push).
-# Tight enough to not crowd the other 5 services on the 2 GB box, but
+# Tight enough to not crowd the other services on the box (rescaled to
+# 4 GB / 3 vCPU as of 2026-09-22 — see hetzner-infra/hetzner.md's Server
+# plan; this cap predates the rescale and hasn't been revisited), but
 # enough for the worker not to OOM-kill mid-push.
 #
 # Secrets: ANTHROPIC_API_KEY and PRICE_REQUEST_GIT_PUSH_URL must be set
