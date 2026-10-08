@@ -375,6 +375,32 @@ alerts stop arriving or `pm2 logs whatsapp-bridge` shows a resumed
 `Code: 405`/reconnect loop, check `sudo systemctl status
 whatsapp-proxy-renew.timer` and `/var/log/whatsapp-proxy-renew.log` first.
 
+**Outage handling (2026-10-08).** The sticky session's residential exit IP
+can rotate mid-session. That drops the WhatsApp WebSocket, and once a
+reconnect hung for about 11.5 h with pm2 still showing "online". The bridge
+now handles this itself (`whatsapp_service/lib/outage.js`):
+
+- A reconnect that isn't open within 90 s exits, and pm2 restarts it.
+- An outage longer than 10 min sends a Telegram alert through
+  `POST /whatsapp/disconnected-alert` (at most hourly), plus a "reconnected"
+  notice afterwards.
+- The outage clock is kept in `/tmp/whatsapp-bridge/`, so it survives those
+  restarts.
+
+`/healthz` returns 200 even when disconnected, so any monitor must check for
+`"connected":true` in the body.
+
+**Deploying bridge code** (not covered by CI/CD):
+
+```bash
+scp index.js hetzner:/opt/whatsapp-bridge/
+scp -r lib hetzner:/opt/whatsapp-bridge/
+ssh hetzner pm2 restart whatsapp-bridge
+```
+
+Run the `scp` lines from `whatsapp_service/`. Restart as alphathiam, never
+with sudo.
+
 Bandwidth is tracked by `whatsapp-nethogs.service` (`nethogs -t -d 60`,
 bridge lines only, logging to `/var/log/nethogs-wa.log`) to size actual
 proxy cost — IPRoyal's rotating-pool product is billed per-GB ($1.75/GB).
