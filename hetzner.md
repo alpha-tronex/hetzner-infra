@@ -312,6 +312,11 @@ backend/docker-compose.prod.yml` build + `up -d`, and waits until `/healthz`
 reports the new short SHA. The runner then checks the same thing on the
 public URL. Secret: `DEPLOY_SSH_KEY` (raw PEM) on the repo.
 
+**Auth (2026-10-07):** the app requires a login for everything except
+`/healthz` (uptime-kuma + CI), `/reauth*` (Google OAuth) and `/whatsapp/*`.
+nginx blocks `/whatsapp/*` publicly ([nginx/assistant.alphatronex.com](./nginx/assistant.alphatronex.com));
+the bridge reaches it on 127.0.0.1:8000. Login settings are in `/opt/assistant/.env`.
+
 State stays outside the checkout and is mounted in: `/opt/assistant/.env`,
 `config/`, `data/`. The old top-level copies of `app/`, `Dockerfile` etc. in
 `/opt/assistant/` are now unused. The container has `mem_limit: 768m`
