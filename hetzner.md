@@ -317,6 +317,13 @@ public URL. Secret: `DEPLOY_SSH_KEY` (raw PEM) on the repo.
 nginx blocks `/whatsapp/*` publicly ([nginx/assistant.alphatronex.com](./nginx/assistant.alphatronex.com));
 the bridge reaches it on 127.0.0.1:8000. Login settings are in `/opt/assistant/.env`.
 
+**Public demo (2026-10-07):** `personal-assistant-demo` (same image,
+`DEMO_MODE=true`, 127.0.0.1:8001, `mem_limit: 384m`) serves
+https://demo.alphatronex.com from sample data. It has no `.env`, no volume
+and no login, and its nginx site rate-limits per IP
+([nginx/demo.alphatronex.com](./nginx/demo.alphatronex.com)). Deployed and
+smoke-tested alongside the app.
+
 State stays outside the checkout and is mounted in: `/opt/assistant/.env`,
 `config/`, `data/`. The old top-level copies of `app/`, `Dockerfile` etc. in
 `/opt/assistant/` are now unused. The container has `mem_limit: 768m`
@@ -382,6 +389,7 @@ after it's enabled.
 | Service | Runtime | Internal port | Public URL |
 |---------|---------|--------------|------------|
 | personal-assistant | Docker | 8000 | https://assistant.alphatronex.com |
+| personal-assistant-demo | Docker | 8001 | https://demo.alphatronex.com (public demo, sample data) |
 | uptime-kuma | Docker | 3001 | https://status.alphatronex.com |
 | vaultwarden | Docker | 8200 | https://vault.alphatronex.com |
 | whatsapp-bridge | Node.js (host) | 3000 | internal only (172.17.0.1:3000) |
