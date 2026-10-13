@@ -123,6 +123,13 @@ the caps themselves haven't been revisited since the rescale. Watch
 get OOM-killed, or the box swaps heavily, raise the specific service's
 mem_limit rather than assuming another rescale is needed.
 
+**CD (2026-10-13):** `FAIS/.github/workflows/ci.yml` deploys on every push to
+`main` that passes checks (server typecheck + node:test, client Vitest, prod
+build, testability audit). The `DEPLOY_SSH_KEY` key is forced to
+`/opt/fais/deploy.sh` (untracked copy of `FAIS/deploy/deploy.sh`), which resets
+`/opt/fais` to `origin/main`, rebuilds `app` with `GIT_SHA`, and waits for
+`/api/health` to report it. Details and rollback: `FAIS/deploy/README.md`.
+
 ---
 
 ## Quiz Master
