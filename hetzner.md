@@ -246,6 +246,26 @@ vhosts and systemd units, matching the FAIS source-lives-elsewhere pattern.
 push to `main`. No manual rsync needed. The workflow runs `ng build` and
 rsyncs `app/dist/app/browser/` to `/var/www/realdosing/`.
 
+The workflow's `DEPLOY_SSH_KEY` (`github-actions-deploy` in
+`authorized_keys`) is **restricted to that one rsync push** (2026-10-13).
+Before that it gave a full shell. The key's forced command is
+[`ssh/rsync-push-only.sh`](./ssh/rsync-push-only.sh), installed at
+`/home/alphathiam/bin/rsync-push-only.sh`:
+
+```
+command="/home/alphathiam/bin/rsync-push-only.sh /var/www/realdosing/",restrict ssh-ed25519 AAAA… github-actions-deploy
+```
+
+It allows only `rsync --server -<flags> --delete . /var/www/realdosing/` (the
+server side of the workflow's `rsync -a --delete`). Shells, other paths, pulls
+and anything with shell metacharacters are rejected and logged:
+`sudo journalctl -t rsync-push-only`. It's a custom wrapper rather than the
+stock `rrsync` because `rrsync` treats the workflow's absolute destination as
+relative to its root, which would break the deploy. **If you change the
+workflow's rsync flags or destination**, update the forced command to match.
+After editing the wrapper here, re-install it with
+`scp ssh/rsync-push-only.sh hetzner:bin/ && ssh hetzner chmod 700 bin/rsync-push-only.sh`.
+
 The vhost ([nginx/dosinghub.com.conf](./nginx/dosinghub.com.conf)) also
 301-redirects the pre-migration flat `.html` URLs (`vitamin-d.html`, etc.)
 to their new clean-path equivalents, and points `error_page 404` at the

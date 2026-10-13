@@ -5,6 +5,7 @@ unrelated apps behind a shared nginx + Certbot reverse proxy.
 
 - [`hetzner.md`](./hetzner.md) — server diagram, services, ports, persistent storage
 - [`nginx/`](./nginx) — vhost configs per subdomain
+- [`ssh/`](./ssh) — forced-command wrappers for restricted GitHub Actions deploy keys
 
 Currently hosted:
 - personal-assistant (source: [Personal-Assistant repo](https://github.com/alpha-tronex/Personal-Assistant))
