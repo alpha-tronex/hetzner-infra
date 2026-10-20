@@ -447,6 +447,7 @@ after it's enabled.
 | vaultwarden | Docker | 8200 | https://vault.alphatronex.com |
 | whatsapp-bridge | Node.js (host) | 3000 | internal only (172.17.0.1:3000) |
 | fais-app | Docker | 8010 | https://fais.alphatronex.com |
+| fais-alphatronex | Docker | 8011 | https://alphatronex.fais.alphatronex.com (Alpha Tronex, fictional test firm; demo mode off) |
 | fais-mongo | Docker | 27017 | internal only (compose network) |
 | realdosing (static) | nginx (no container) | — | https://dosinghub.com |
 | quizmaster-app | Docker | 8020 | https://quizmaster.alphatronex.com |
