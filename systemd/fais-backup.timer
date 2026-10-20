@@ -1,0 +1,16 @@
+# Fires fais-backup.service nightly at 07:30 UTC (03:30 Eastern in summer, 02:30 in winter),
+# after the FAIS demo's 3:00 AM Eastern reset so the backup sees the fresh baseline.
+# Placed in /etc/systemd/system/ on the Hetzner VPS.
+
+[Unit]
+Description=Run the FAIS nightly backup
+
+[Timer]
+OnCalendar=*-*-* 07:30:00 UTC
+RandomizedDelaySec=10min
+# Run a missed backup at boot if the server was down at 07:30.
+Persistent=true
+Unit=fais-backup.service
+
+[Install]
+WantedBy=timers.target
