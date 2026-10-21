@@ -130,6 +130,43 @@ build, testability audit). The `DEPLOY_SSH_KEY` key is forced to
 `/opt/fais` to `origin/main`, rebuilds `app` with `GIT_SHA`, and waits for
 `/api/health` to report it. Details and rollback: `FAIS/deploy/README.md`.
 
+**MongoDB auth (2026-10-20):** `fais-mongo` runs with `--auth`. Logins (admin db): `faisRoot`
+(humans), `faisApp` (demo, `fais_demo` + `fais_demo_snapshot`), `faisAgent` (read-only AI Query),
+`faisBackup` (backup role), plus `fais<Firm>` / `fais<Firm>Agent` per firm. Passwords:
+`~/.fais-mongo-credentials` and `~/.fais-firm-<firm>-credentials` (mode 600); URIs in each env
+file. For a shell: source the credentials file, then
+`docker exec -it fais-mongo mongosh -u faisRoot -p "$FAIS_ROOT_PW" --authenticationDatabase admin`.
+Plan and rollback: `FAIS/docs/MONGODB_AUTH_PLAN.md`. The old `fais` database is kept until
+about 2026-10-27, then dropped.
+
+**Firm deployments (2026-10-20):** one container per firm, defined in the FAIS compose file, same
+image as the demo, sharing `fais-mongo` and `fais-minio` with their own database, logins, bucket,
+MinIO user and keys. Env file: `/opt/fais/firms/<firm>/.env.production`. `deploy.sh` health-checks
+every firm port. Runbook: `FAIS/docs/ONBOARDING_RUNBOOK.md`.
+- `fais-alphatronex` (fictional test firm): 127.0.0.1:8011, `fais_alphatronex`, bucket
+  `fais-alphatronex`. Public URL `https://alphatronex.fais.alphatronex.com` (DNS, nginx and
+  certbot done 2026-10-20).
+
+**Backups (2026-10-20):** `fais-backup.timer` runs `/opt/fais-backup/fais-backup.sh` (source:
+[backups/fais-backup.sh](./backups/fais-backup.sh)) nightly at 07:30 UTC, after the demo reset. It
+dumps the whole MongoDB server as `faisBackup` (all FAIS databases plus logins and roles), mirrors
+every MinIO bucket, copies the env and credential files, and uploads them to an encrypted restic
+repository `b2:faisdocs-backups:fais` (Backblaze B2, key limited to that bucket). It keeps 30 daily
+and 6 monthly snapshots. Any failure sends a Telegram alert through @alphatronexbot.
+- Server files (mode 600): `~/.fais-backup-b2.env`, `~/.fais-backup-alert.env`,
+  `~/.fais-backup-restic-password`. **Keep a copy of the restic password off this server**
+  (Vaultwarden runs here too); without it the backups can't be restored.
+- Logs: `journalctl -u fais-backup`. Run now: `sudo systemctl start fais-backup.service`.
+- Restore (restore-tested 2026-10-20):
+  ```bash
+  set -a; . ~/.fais-backup-b2.env; set +a
+  export RESTIC_REPOSITORY="b2:${B2_BUCKET}:fais" RESTIC_PASSWORD_FILE=~/.fais-backup-restic-password
+  restic snapshots
+  restic restore latest --target /var/tmp/fais-restore     # files land under var/tmp/fais-backup/
+  # One database:  mongorestore --archive=.../mongo/fais-mongo.archive.gz --gzip --nsInclude='fais_demo.*'
+  # Documents:     mc mirror .../minio/<bucket> <alias>/<bucket>   (inside fais-minio)
+  ```
+
 ---
 
 ## Quiz Master
@@ -449,6 +486,7 @@ after it's enabled.
 | fais-app | Docker | 8010 | https://fais.alphatronex.com |
 | fais-alphatronex | Docker | 8011 | https://alphatronex.fais.alphatronex.com (Alpha Tronex, fictional test firm; demo mode off) |
 | fais-mongo | Docker | 27017 | internal only (compose network) |
+| fais-minio | Docker | 9000 | internal only (compose network) |
 | realdosing (static) | nginx (no container) | — | https://dosinghub.com |
 | quizmaster-app | Docker | 8020 | https://quizmaster.alphatronex.com |
 | quizmaster-mongo | Docker | 27017 | internal only (compose network) |

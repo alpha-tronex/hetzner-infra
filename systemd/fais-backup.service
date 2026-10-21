@@ -1,0 +1,18 @@
+# FAIS nightly backup (MongoDB, MinIO documents, env files) to Backblaze B2 via restic.
+# Placed in /etc/systemd/system/ on the Hetzner VPS. Fired by fais-backup.timer.
+# Script: /opt/fais-backup/fais-backup.sh (source: hetzner-infra/backups/fais-backup.sh).
+# Failures send a Telegram alert from inside the script.
+
+[Unit]
+Description=FAIS nightly backup to Backblaze B2
+Wants=network-online.target
+After=network-online.target docker.service
+
+[Service]
+Type=oneshot
+User=alphathiam
+Group=alphathiam
+ExecStart=/opt/fais-backup/fais-backup.sh
+Nice=10
+IOSchedulingClass=idle
+TimeoutStartSec=1h
