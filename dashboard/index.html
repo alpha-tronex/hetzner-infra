@@ -1,0 +1,114 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex, nofollow">
+<title>Apps dashboard</title>
+<style>
+:root{--bg:#faf9f5;--panel:#fff;--fg:#1f1e1d;--muted:#6b6963;--line:#e4e1d8;--ok:#2f7d4f;--warn:#b8741a;--bar1:#c96442;--bar2:#5b7fa6;--track:#ece9df}
+@media (prefers-color-scheme:dark){:root{--bg:#1c1b19;--panel:#262523;--fg:#f0eee6;--muted:#a09d94;--line:#3a3835;--ok:#6cc08d;--warn:#e0a550;--bar1:#e0805e;--bar2:#7ea3cc;--track:#3a3835}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--fg);font:15px/1.5 system-ui,-apple-system,"Segoe UI",sans-serif}
+main{max-width:72rem;margin:0 auto;padding:clamp(1rem,4vw,2.5rem)}
+h1{font:400 1.9rem/1.2 Georgia,"Times New Roman",serif;margin:0 0 .25rem}
+.sub{color:var(--muted);margin:0 0 1.5rem}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:1.1rem}
+.card h2{font-size:1rem;font-weight:600;margin:0 0 .15rem}
+.note{color:var(--muted);font-size:.8rem;margin:0 0 .9rem}
+.kpis,.charts{display:grid;gap:1rem;margin-bottom:1rem}
+.kpis{grid-template-columns:repeat(auto-fit,minmax(min(100%,9rem),1fr))}
+.charts{grid-template-columns:repeat(auto-fit,minmax(min(100%,20rem),1fr))}
+.kpi b{display:block;font:400 1.9rem/1.2 Georgia,serif;font-variant-numeric:tabular-nums}
+.kpi span{color:var(--muted);font-size:.8rem}
+.bar{display:grid;grid-template-columns:minmax(6rem,10rem) 1fr 1.5rem;gap:.6rem;align-items:center;margin-bottom:.4rem;font-size:.8rem}
+.track{height:.5rem;border-radius:.25rem;background:var(--track)}
+.fill{height:100%;border-radius:.25rem}
+.v{text-align:right;color:var(--muted);font-variant-numeric:tabular-nums}
+.tbl{overflow:auto}
+table{width:100%;border-collapse:collapse;font-size:.8rem}
+th,td{text-align:left;padding:.4rem .6rem;border-bottom:1px solid var(--line);vertical-align:top}
+th{color:var(--muted);font-weight:600;white-space:nowrap}
+td.cd{white-space:nowrap}
+td.cd::before{content:"\25CF  ";color:var(--muted)}
+td.cd.verified::before{color:var(--ok)}
+td.cd.unverified::before,td.cd.manual::before,td.cd.no_checks::before{color:var(--warn)}
+@media (max-width:640px){.hn{display:none}}
+</style>
+</head>
+<body>
+<main>
+<h1>Apps overview</h1>
+<p class="sub" id="takeaway"></p>
+<div class="kpis">
+<div class="card kpi"><b id="k-total">0</b><span>Apps tracked</span></div>
+<div class="card kpi"><b id="k-ver">0</b><span>Pipeline live and verified</span></div>
+<div class="card kpi"><b id="k-att">0</b><span>Need pipeline attention</span></div>
+</div>
+<div class="charts">
+<div class="card"><h2>Where they run</h2><p class="note">Apps by hosting target</p><div id="bars-host"></div></div>
+<div class="card"><h2>Deploy pipeline state</h2><p class="note">Apps by CI/CD status</p><div id="bars-cd"></div></div>
+</div>
+<div class="card">
+<h2>All apps</h2>
+<p class="note">Snapshot from project notes (CI/CD as of 2026-10-13), not a live health check.</p>
+<div class="tbl"><table>
+<thead><tr><th>App</th><th class="hn">Type</th><th class="hn">Stack</th><th>Host</th><th class="hn">Port</th><th class="hn">Address</th><th>Pipeline</th><th class="hn">Notes</th></tr></thead>
+<tbody id="rows"></tbody>
+</table></div>
+</div>
+</main>
+<script>
+const APPS = [
+  {app:"personal-assistant",kind:"Backend service",stack:"Python, FastAPI",host:"Hetzner (Docker)",port:"8000",url:"assistant.alphatronex.com",cd:"verified",cdl:"CD live, verified",notes:"Green deploy 2026-10-07; /healthz reports the pushed SHA"},
+  {app:"uptime-kuma",kind:"Monitoring",stack:"Third-party",host:"Hetzner (Docker)",port:"3001",url:"status.alphatronex.com",cd:"none",cdl:"No CD (third-party)",notes:"Status page for the box"},
+  {app:"vaultwarden",kind:"Password manager",stack:"Third-party",host:"Hetzner (Docker)",port:"8200",url:"vault.alphatronex.com",cd:"none",cdl:"No CD (third-party)",notes:"Self-hosted vault"},
+  {app:"whatsapp-bridge",kind:"Bridge",stack:"Node, pm2",host:"Hetzner (host)",port:"3000",url:"internal only",cd:"manual",cdl:"Deployed by hand",notes:"Runs on the host, not Docker; needs the residential proxy (renewed every 6 days)"},
+  {app:"fais-app",kind:"Web app",stack:"Angular 21, Express, MongoDB",host:"Hetzner (Docker)",port:"8010",url:"fais.alphatronex.com",cd:"unverified",cdl:"CD written, not live",notes:"Pending deploy key secret, server script and first green run"},
+  {app:"quizmaster-app",kind:"Web app",stack:"Angular, Express, MongoDB",host:"Hetzner (Docker)",port:"8020",url:"quizmaster.alphatronex.com",cd:"unverified",cdl:"CD added, not verified",notes:"Repo: quizzes. Needs a clean end-to-end deploy run"},
+  {app:"dosinghub (realdosing)",kind:"Static site",stack:"Static, nginx",host:"Hetzner (static)",port:"",url:"dosinghub.com",cd:"no_checks",cdl:"Auto-deploys, no checks",notes:"Repo: supplement-price-app; pricing pipeline runs as systemd units"},
+  {app:"Quiz Master Mobile",kind:"Mobile app",stack:"Expo, React Native",host:"App Store (EAS)",port:"",url:"com.alphatronex.quizmaster",cd:"unverified",cdl:"CD added, not verified",notes:"Release job added 2026-09-29; no tag push proven yet; README simulator check missing"},
+  {app:"Language Translator",kind:"Mobile app",stack:"Expo, React Native",host:"App Store (EAS)",port:"",url:"com.alphatronex.languagetranslator",cd:"verified",cdl:"CD live, verified",notes:"v1.1.0 to v1.3.0 reached TestFlight via tag-triggered release"},
+  {app:"Language Translator API",kind:"Backend service",stack:"Next.js, Upstash Redis",host:"Vercel",port:"",url:"Vercel",cd:"verified",cdl:"CD live, verified",notes:"Checks, deploy and smoke test green 2026-09-28"}
+];
+const ATTN = ["unverified","manual","no_checks"];
+const $ = (id) => document.getElementById(id);
+$("k-total").textContent = APPS.length;
+$("k-ver").textContent = APPS.filter(a => a.cd === "verified").length;
+const attn = APPS.filter(a => ATTN.includes(a.cd));
+$("k-att").textContent = attn.length;
+$("takeaway").textContent = attn.length
+  ? "Pipelines still to prove or automate: " + attn.map(a => a.app).join(", ") + "."
+  : "Every app with a pipeline is live and verified.";
+function bars(boxId, key, color) {
+  const m = {};
+  APPS.forEach(a => { m[a[key]] = (m[a[key]] || 0) + 1; });
+  const rows = Object.entries(m).sort((x, y) => y[1] - x[1]);
+  const max = rows[0][1];
+  rows.forEach(([label, n]) => {
+    const line = document.createElement("div"); line.className = "bar";
+    const l = document.createElement("span"); l.textContent = label;
+    const t = document.createElement("div"); t.className = "track";
+    const f = document.createElement("div"); f.className = "fill";
+    f.style.width = (100 * n / max) + "%"; f.style.background = color;
+    t.appendChild(f);
+    const v = document.createElement("span"); v.className = "v"; v.textContent = n;
+    line.append(l, t, v);
+    $(boxId).appendChild(line);
+  });
+}
+bars("bars-host", "host", "var(--bar1)");
+bars("bars-cd", "cdl", "var(--bar2)");
+APPS.forEach(a => {
+  const tr = document.createElement("tr");
+  [["app",""],["kind","hn"],["stack","hn"],["host",""],["port","hn"],["url","hn"],["cdl","cd"],["notes","hn"]].forEach(([k, cls]) => {
+    const td = document.createElement("td");
+    td.textContent = a[k];
+    td.className = cls + (k === "cdl" ? " " + a.cd : "");
+    tr.appendChild(td);
+  });
+  $("rows").appendChild(tr);
+});
+</script>
+</body>
+</html>
