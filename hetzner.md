@@ -144,8 +144,8 @@ image as the demo, sharing `fais-mongo` and `fais-minio` with their own database
 MinIO user and keys. Env file: `/opt/fais/firms/<firm>/.env.production`. `deploy.sh` health-checks
 every firm port. Runbook: `FAIS/docs/ONBOARDING_RUNBOOK.md`.
 - `fais-alphatronex` (fictional test firm): 127.0.0.1:8011, `fais_alphatronex`, bucket
-  `fais-alphatronex`. Public URL `alphatronex.fais.alphatronex.com` once DNS, nginx and certbot
-  are done.
+  `fais-alphatronex`. Public URL `https://alphatronex.fais.alphatronex.com` (DNS, nginx and
+  certbot done 2026-10-20).
 
 **Backups (2026-10-20):** `fais-backup.timer` runs `/opt/fais-backup/fais-backup.sh` (source:
 [backups/fais-backup.sh](./backups/fais-backup.sh)) nightly at 07:30 UTC, after the demo reset. It
