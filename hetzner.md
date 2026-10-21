@@ -147,6 +147,15 @@ every firm port. Runbook: `FAIS/docs/ONBOARDING_RUNBOOK.md`.
   `fais-alphatronex`. Public URL `https://alphatronex.fais.alphatronex.com` (DNS, nginx and
   certbot done 2026-10-20).
 
+**Document encryption (2026-10-21):** `fais-minio` encrypts every object at rest (SSE-S3, AES-256)
+with a static KMS key, `MINIO_KMS_SECRET_KEY=fais-documents-key:<base64>` in
+`/opt/fais/minio/.env.production` (mode 600). Every bucket has default encryption (`mc encrypt set
+sse-s3`), so the app needs no changes; a new firm bucket needs the same command. **Without this key
+no document can be read**, including documents restored from backup: it's in the nightly backup (in
+`minio.env.production`), and must also be kept in Vaultwarden and off this server. Check with
+`mc admin kms key status <alias>` and `mc encrypt info <alias>/<bucket>` inside `fais-minio`. Don't
+rotate it by editing the env file: objects encrypted under the old key would become unreadable.
+
 **Backups (2026-10-20):** `fais-backup.timer` runs `/opt/fais-backup/fais-backup.sh` (source:
 [backups/fais-backup.sh](./backups/fais-backup.sh)) nightly at 07:30 UTC, after the demo reset. It
 dumps the whole MongoDB server as `faisBackup` (all FAIS databases plus logins and roles), mirrors
