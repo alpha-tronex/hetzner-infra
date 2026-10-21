@@ -147,6 +147,15 @@ every firm port. Runbook: `FAIS/docs/ONBOARDING_RUNBOOK.md`.
   `fais-alphatronex`. Public URL `https://alphatronex.fais.alphatronex.com` (DNS, nginx and
   certbot done 2026-10-20).
 
+**Document encryption (2026-10-21):** `fais-minio` encrypts every object at rest (SSE-S3, AES-256)
+with a static KMS key, `MINIO_KMS_SECRET_KEY=fais-documents-key:<base64>` in
+`/opt/fais/minio/.env.production` (mode 600). Every bucket has default encryption (`mc encrypt set
+sse-s3`), so the app needs no changes; a new firm bucket needs the same command. **Without this key
+no document can be read**, including documents restored from backup: it's in the nightly backup (in
+`minio.env.production`), and must also be kept in Vaultwarden and off this server. Check with
+`mc admin kms key status <alias>` and `mc encrypt info <alias>/<bucket>` inside `fais-minio`. Don't
+rotate it by editing the env file: objects encrypted under the old key would become unreadable.
+
 **Backups (2026-10-20):** `fais-backup.timer` runs `/opt/fais-backup/fais-backup.sh` (source:
 [backups/fais-backup.sh](./backups/fais-backup.sh)) nightly at 07:30 UTC, after the demo reset. It
 dumps the whole MongoDB server as `faisBackup` (all FAIS databases plus logins and roles), mirrors
@@ -363,6 +372,34 @@ See [nginx/alphatronex.com.conf](./nginx/alphatronex.com.conf) for the vhost.
 
 ---
 
+## Dashboard (apps overview)
+
+Added 2026-10-20. `dashboard.alphatronex.com` is one static page listing the
+apps on this box and elsewhere (host, port, address, CI/CD state). Same
+non-Docker pattern as the root splash page: served directly by nginx from
+`/var/www/dashboard`, source in [dashboard/](./dashboard/) in this repo. The
+app list is hard-coded in `dashboard/index.html`: a snapshot of the notes in
+this file and the CI/CD status tables, **not** a live health check, so edit it
+when an app or its pipeline status changes, then redeploy.
+
+The page names internal hostnames and ports, so the vhost sits behind HTTP
+basic auth (`/etc/nginx/.htpasswd-dashboard`, created with `htpasswd`; the
+password is not in this repo) and sends `X-Robots-Tag: noindex`. See
+[nginx/dashboard.alphatronex.com.conf](./nginx/dashboard.alphatronex.com.conf).
+
+Deploy:
+
+```
+rsync -a --delete --chmod=D755,F644 dashboard/ hetzner:/var/www/dashboard/
+```
+
+First-time setup (DNS A record `dashboard` → 5.161.104.5 at the provider
+hosting `alphatronex.com`, the directory, the password file, the vhost and
+Certbot) is listed in the vhost file's header comment. Certbot cert expiry:
+add once issued.
+
+---
+
 ## Personal assistant — CD (added 2026-10-07)
 
 Until 2026-10 `/opt/assistant` was a hand-copied `backend/` folder and the
@@ -488,6 +525,7 @@ after it's enabled.
 | fais-mongo | Docker | 27017 | internal only (compose network) |
 | fais-minio | Docker | 9000 | internal only (compose network) |
 | realdosing (static) | nginx (no container) | — | https://dosinghub.com |
+| dashboard (static) | nginx (no container) | — | https://dashboard.alphatronex.com (basic auth) |
 | quizmaster-app | Docker | 8020 | https://quizmaster.alphatronex.com |
 | quizmaster-mongo | Docker | 27017 | internal only (compose network) |
 | tts-service | Docker | 8300 | https://tts.alphatronex.com (only `/speak` and `/health`) |
