@@ -1,6 +1,9 @@
 # Hetzner Server Diagram
 **IP:** 5.161.104.5 — 3 vCPU · 4 GB RAM · 40 GB disk (local) · Ubuntu
 
+This file is mostly about the shared box above. FAIS firm deployments (client data) run on a second
+server, **fais-clients** (178.156.222.192): see [Client-data server](#client-data-server-fais-clients).
+
 ## Server plan (as of 2026-09-22)
 
 | Spec | Value |
@@ -139,29 +142,30 @@ file. For a shell: source the credentials file, then
 Plan and rollback: `FAIS/docs/MONGODB_AUTH_PLAN.md`. The old `fais` database is kept until
 about 2026-10-27, then dropped.
 
-**Firm deployments (2026-10-20):** one container per firm, defined in the FAIS compose file, same
-image as the demo, sharing `fais-mongo` and `fais-minio` with their own database, logins, bucket,
-MinIO user and keys. Env file: `/opt/fais/firms/<firm>/.env.production`. `deploy.sh` health-checks
-every firm port. Runbook: `FAIS/docs/ONBOARDING_RUNBOOK.md`.
-- `fais-alphatronex` (fictional test firm): 127.0.0.1:8011, `fais_alphatronex`, bucket
-  `fais-alphatronex`. Public URL `https://alphatronex.fais.alphatronex.com` (DNS, nginx and
-  certbot done 2026-10-20).
+**Firm deployments moved off this box (2026-10-23).** They run on the client-data server
+(below). Since then this box's `fais-mongo` and `fais-minio` hold only demo data (`fais_demo`,
+`fais_demo_snapshot`, the old `fais`, bucket `fais-documents`), and `deploy.sh demo` starts only
+`mongo`, `minio` and `app`. The firm's container, database, logins, bucket, MinIO user and
+credentials were deleted here after the move. `/opt/fais/firms/alphatronex/.env.production` is an
+empty stub until the FAIS PR that drops `app-alphatronex` from `docker-compose.prod.yml` is merged;
+delete it then. `mongo` is pinned to `mongo:8.2.11` by digest (see the client-data server's notes).
 
 **Document encryption (2026-10-21):** `fais-minio` encrypts every object at rest (SSE-S3, AES-256)
 with a static KMS key, `MINIO_KMS_SECRET_KEY=fais-documents-key:<base64>` in
 `/opt/fais/minio/.env.production` (mode 600). Every bucket has default encryption (`mc encrypt set
-sse-s3`), so the app needs no changes; a new firm bucket needs the same command. **Without this key
-no document can be read**, including documents restored from backup: it's in the nightly backup (in
-`minio.env.production`), and must also be kept in Vaultwarden and off this server. Check with
+sse-s3`), so the app needs no changes; a new firm bucket needs the same command. **Without this key no document can be read**, including documents restored from backup: it's in the nightly backup (in `minio.env.production`), and must also be kept in Vaultwarden and off this server. This key and the root password leaked into a session transcript on 2026-10-22, so they now protect only the demo's fictional documents; firm documents are under the client-data server's own key. Check with
 `mc admin kms key status <alias>` and `mc encrypt info <alias>/<bucket>` inside `fais-minio`. Don't
 rotate it by editing the env file: objects encrypted under the old key would become unreadable.
 
-**Backups (2026-10-20):** `fais-backup.timer` runs `/opt/fais-backup/fais-backup.sh` (source:
+**Backups (2026-10-20; both servers since 2026-10-23):** on each FAIS server, `fais-backup.timer` runs `/opt/fais-backup/fais-backup.sh` (source:
 [backups/fais-backup.sh](./backups/fais-backup.sh)) nightly at 07:30 UTC, after the demo reset. It
 dumps the whole MongoDB server as `faisBackup` (all FAIS databases plus logins and roles), mirrors
 every MinIO bucket, copies the env and credential files, and uploads them to an encrypted restic
-repository `b2:faisdocs-backups:fais` (Backblaze B2, key limited to that bucket). It keeps 30 daily
-and 6 monthly snapshots. Any failure sends a Telegram alert through @alphatronexbot.
+repository `b2:faisdocs-backups:fais` (Backblaze B2, key limited to that bucket). It keeps 30 daily and 6 monthly snapshots. Any failure sends a Telegram alert through @alphatronexbot.
+Both servers share the repository, with their own restic host tag (`fais` here, `fais-clients` on
+the client-data server, set by [systemd/fais-backup.service.d/fais-clients.conf](./systemd/fais-backup.service.d/fais-clients.conf));
+each one's `forget --prune` only touches its own host's snapshots. Snapshot `9805beae` (host
+`fais`, 2026-10-23 16:47 UTC) is the last copy of the Alpha Tronex data from this box.
 - Server files (mode 600): `~/.fais-backup-b2.env`, `~/.fais-backup-alert.env`,
   `~/.fais-backup-restic-password`. **Keep a copy of the restic password off this server**
   (Vaultwarden runs here too); without it the backups can't be restored.
@@ -170,11 +174,95 @@ and 6 monthly snapshots. Any failure sends a Telegram alert through @alphatronex
   ```bash
   set -a; . ~/.fais-backup-b2.env; set +a
   export RESTIC_REPOSITORY="b2:${B2_BUCKET}:fais" RESTIC_PASSWORD_FILE=~/.fais-backup-restic-password
-  restic snapshots
-  restic restore latest --target /var/tmp/fais-restore     # files land under var/tmp/fais-backup/
+    restic snapshots --host fais          # or --host fais-clients for firm data
+  restic restore latest --host fais --target /var/tmp/fais-restore     # files land under var/tmp/fais-backup/
+  # On fais-clients restore under /srv/fais-data (the encrypted volume), not /var/tmp.
   # One database:  mongorestore --archive=.../mongo/fais-mongo.archive.gz --gzip --nsInclude='fais_demo.*'
   # Documents:     mc mirror .../minio/<bucket> <alias>/<bucket>   (inside fais-minio)
   ```
+
+---
+
+## Client-data server (fais-clients)
+
+Added 2026-10-23 so client data no longer sits next to the public demo and unrelated apps. Runs **only**
+FAIS firm deployments with their own MongoDB and MinIO. Plan and cutover log:
+`FAIS/docs/CLIENT_DATA_SERVER_PLAN.md`.
+
+| Spec | Value |
+|------|-------|
+| Name | `fais-clients` (Hetzner #172080698), SSH alias `fais-clients` |
+| IP | 178.156.222.192, IPv6 2a01:4ff:f0:bd1b::/64 |
+| Plan | CPX11: 2 vCPU · 2 GB RAM · 40 GB disk · 1 TB traffic, Ashburn, Ubuntu 26.04 |
+| Volume | 20 GB Hetzner Volume (`scsi-0HC_Volume_107253450`), LUKS2, mounted at `/srv/fais-data` |
+| Cost | €20.49/month (console, server + volume + IPv4) |
+| Firewall | Hetzner Cloud Firewall `fais-clients` + `ufw`: 22, 80, 443 only. SSH by key, no root login |
+| First boot | [client-data/cloud-init.yml](./client-data/cloud-init.yml) |
+
+2 GB holds mongo (450m), minio (384m) and one firm (768m) with 2 GB swap. **Rescale to CPX21
+(4 GB) before a second firm.**
+
+```
+alphatronex.fais.alphatronex.com
+        │   nginx + Certbot (cert copied from the shared box 2026-10-23, renews here)
+        ▼
+  :8011 (Docker, 127.0.0.1 only)
+┌────────────────────┐      ┌────────────────────┐   ┌────────────────────┐
+│  fais-alphatronex   │◄────►│    fais-mongo      │   │    fais-minio      │
+│  same image as the  │      │ mongo:8.2.11       │   │ SSE-S3, own KMS key│
+│  demo, demo mode off│◄────►│ --auth             │   │ bucket per firm    │
+└────────────────────┘      └────────────────────┘   └────────────────────┘
+                     all of Docker's data: /srv/fais-data/docker (LUKS)
+```
+
+**Encryption at rest.** `/etc/crypttab` unlocks the volume at boot with `/etc/luks/fais-data.key`
+(root, mode 400, on the unencrypted OS disk), then `/etc/fstab` mounts it. Docker's `data-root` is
+`/srv/fais-data/docker` (`/etc/docker/daemon.json`), and a drop-in
+(`/etc/systemd/system/docker.service.d/fais-data.conf`, `RequiresMountsFor=/srv/fais-data`) keeps
+Docker from starting before the mount. The 2 GB swap file is on the volume too. Reboot tested
+2026-10-23. This protects copies of the volume (snapshots, retired drives, a volume attached
+elsewhere), not root on the running server. Check: `sudo cryptsetup status fais-data`, `findmnt /srv/fais-data`.
+
+**Keys and where they are kept.** All generated on this server on 2026-10-23, none printed. **Copy
+each into Vaultwarden and an offline copy** (a printed sheet or an encrypted USB key); Vaultwarden
+runs on the shared box, so it alone isn't enough.
+
+| Secret | On the server (mode 600) | Without it |
+|---|---|---|
+| LUKS key file | `/etc/luks/fais-data.key` (64 random bytes) | Volume can't unlock at boot (use the passphrase) |
+| LUKS recovery passphrase (key slot 1) | `~/.fais-luks-recovery-passphrase` | Volume unreadable if the key file is lost |
+| LUKS header backup | `/root/fais-data-luks-header.img` | Volume unreadable if its header is damaged |
+| MinIO root user, password and KMS key `fais-clients-documents-key` | `/opt/fais/minio/.env.production` | **No document can be read**, restored ones included |
+| Mongo `faisRoot`, `faisBackup` | `~/.fais-mongo-credentials` | Admin access, backups |
+| Firm logins and MinIO user | `~/.fais-firm-<firm>-credentials`, `/opt/fais/firms/<firm>/.env.production` | Firm app (also holds the firm's `SSN_ENCRYPTION_KEY_B64`) |
+| restic password (shared with the shared box) | `~/.fais-backup-restic-password` | No backup can be restored |
+
+The MinIO, Mongo and firm files and the restic password are also inside each nightly backup; the
+LUKS secrets aren't (the backup holds the data itself). To copy them to Vaultwarden, view them in
+your own terminal (`ssh fais-clients sudo cat /etc/luks/fais-data.key | base64`, `ssh fais-clients
+cat ~/.fais-luks-recovery-passphrase`), not in a Claude session.
+
+**Images.** `mongo` is pinned to `mongo:8.2.11@sha256:951c2ff9…`: `mongo:8` images from October
+2026 refuse to start on kernels 6.19 and newer (SERVER-121912), including Ubuntu 26.04's 7.0 kernel,
+where 8.2.11 runs fine. MinIO's community image can no longer be pulled (Docker Hub and quay.io), so
+`minio/minio:RELEASE.2025-09-07T16-13-09Z` was copied from the shared box with `docker save`; a copy
+is at `/srv/fais-data/images/`. Replace MinIO before more firms (FAIS readiness plan).
+
+**Deploys.** `/opt/fais` is a clone of FAIS with its own read-only GitHub deploy key. CI's
+`DEPLOY_CLIENTS_SSH_KEY` is forced to `/opt/fais/deploy.sh clients` (`docker-compose.clients.yml`,
+health check on every firm port). `docker-buildx` is installed for the build secret. Details:
+`FAIS/deploy/README.md`.
+
+**Backups.** Same script, units and B2 repository as the shared box, host tag `fais-clients`, nightly
+at 07:30 UTC. Restore-tested 2026-10-23 (412 documents and 18 files matched live).
+
+**Services**
+
+| Service | Runtime | Internal port | Public URL |
+|---------|---------|--------------|------------|
+| fais-alphatronex | Docker | 8011 | https://alphatronex.fais.alphatronex.com (Alpha Tronex, fictional test firm) |
+| fais-mongo | Docker | 27017 | internal only (compose network) |
+| fais-minio | Docker | 9000 | internal only (compose network) |
 
 ---
 
@@ -520,8 +608,7 @@ after it's enabled.
 | uptime-kuma | Docker | 3001 | https://status.alphatronex.com |
 | vaultwarden | Docker | 8200 | https://vault.alphatronex.com |
 | whatsapp-bridge | Node.js (host) | 3000 | internal only (172.17.0.1:3000) |
-| fais-app | Docker | 8010 | https://fais.alphatronex.com |
-| fais-alphatronex | Docker | 8011 | https://alphatronex.fais.alphatronex.com (Alpha Tronex, fictional test firm; demo mode off) |
+| fais-app | Docker | 8010 | https://fais.alphatronex.com (public demo; firms are on fais-clients) |
 | fais-mongo | Docker | 27017 | internal only (compose network) |
 | fais-minio | Docker | 9000 | internal only (compose network) |
 | realdosing (static) | nginx (no container) | — | https://dosinghub.com |

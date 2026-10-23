@@ -1,0 +1,53 @@
+#cloud-config
+# First-boot setup for the FAIS client-data server (fais-clients, Hetzner CPX21, Ashburn).
+# Paste into "Cloud config" when creating the server. Holds no secrets: the SSH key is public.
+# What it does: the alphathiam user with the operator's key, key-only SSH with no root login,
+# Docker, nginx + certbot, restic, cryptsetup for the LUKS data volume, unattended security
+# upgrades, and a host firewall (22, 80, 443) as a second layer under the Hetzner Cloud Firewall.
+# The volume itself is encrypted by hand afterwards (see hetzner.md -> Client-data server).
+
+users:
+  - name: alphathiam
+    groups: [sudo]
+    shell: /bin/bash
+    sudo: "ALL=(ALL) NOPASSWD:ALL"
+    lock_passwd: true
+    ssh_authorized_keys:
+      - ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAICvSfKkLY1S5idvDAY9ND01pk9qIThZH/iaCycrh31aa alphathiam@hetzner
+
+package_update: true
+package_upgrade: true
+packages:
+  - docker.io
+  - docker-compose-v2
+  - docker-buildx
+  - nginx
+  - certbot
+  - python3-certbot-nginx
+  - restic
+  - cryptsetup
+  - unattended-upgrades
+  - ufw
+  - git
+
+write_files:
+  - path: /etc/ssh/sshd_config.d/10-fais-hardening.conf
+    content: |
+      PermitRootLogin no
+      PasswordAuthentication no
+      KbdInteractiveAuthentication no
+  - path: /etc/apt/apt.conf.d/20auto-upgrades
+    content: |
+      APT::Periodic::Update-Package-Lists "1";
+      APT::Periodic::Unattended-Upgrade "1";
+
+runcmd:
+  - usermod -aG docker alphathiam
+  - systemctl enable --now docker
+  - ufw default deny incoming
+  - ufw allow 22/tcp
+  - ufw allow 80/tcp
+  - ufw allow 443/tcp
+  - ufw --force enable
+  - systemctl restart ssh
+  - mkdir -p /opt/fais && chown alphathiam:alphathiam /opt/fais
