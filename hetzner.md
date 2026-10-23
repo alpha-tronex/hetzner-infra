@@ -99,10 +99,14 @@ assistant.alphatronex   status.alphatronex   vault.alphatronex
 ## FAIS
 
 Migrated from Render (2026-07). Source + Dockerfile/compose live in the FAIS repo;
-this repo only has the nginx vhost. See [nginx/fais.alphatronex.com.conf](./nginx/fais.alphatronex.com.conf).
+this repo only has the nginx vhosts. Since 2026-10-23 the demo is **demo.faislaw.com**
+([nginx/demo.faislaw.com.conf](./nginx/demo.faislaw.com.conf)); `faislaw.com` 302s to it until there's
+a landing page ([nginx/faislaw.com.conf](./nginx/faislaw.com.conf)), and the old `fais.alphatronex.com`
+301-redirects to it ([nginx/fais.alphatronex.com.conf](./nginx/fais.alphatronex.com.conf)). The demo's
+`APP_BASE_URL` is `https://demo.faislaw.com`. `www.faislaw.com` shares the apex vhost and certificate.
 
 ```
-fais.alphatronex.com
+demo.faislaw.com
         │
         ▼
   :8010 (Docker, 127.0.0.1 only)
@@ -204,8 +208,8 @@ FAIS firm deployments with their own MongoDB and MinIO. Plan and cutover log:
 (4 GB) before a second firm.**
 
 ```
-alphatronex.fais.alphatronex.com
-        │   nginx + Certbot (cert copied from the shared box 2026-10-23, renews here)
+alphatronex.faislaw.com
+        │   nginx + Certbot (issued 2026-10-23, renews here)
         ▼
   :8011 (Docker, 127.0.0.1 only)
 ┌────────────────────┐      ┌────────────────────┐   ┌────────────────────┐
@@ -261,7 +265,7 @@ at 07:30 UTC. Restore-tested 2026-10-23 (412 documents and 18 files matched live
 
 | Service | Runtime | Internal port | Public URL |
 |---------|---------|--------------|------------|
-| fais-alphatronex | Docker | 8011 | https://alphatronex.fais.alphatronex.com (Alpha Tronex, fictional test firm) |
+| fais-alphatronex | Docker | 8011 | https://alphatronex.faislaw.com (Alpha Tronex, fictional test firm). The old `alphatronex.fais.alphatronex.com` is a 301 on the shared box, where its DNS record points |
 | fais-mongo | Docker | 27017 | internal only (compose network) |
 | fais-minio | Docker | 9000 | internal only (compose network) |
 
@@ -609,7 +613,7 @@ after it's enabled.
 | uptime-kuma | Docker | 3001 | https://status.alphatronex.com |
 | vaultwarden | Docker | 8200 | https://vault.alphatronex.com |
 | whatsapp-bridge | Node.js (host) | 3000 | internal only (172.17.0.1:3000) |
-| fais-app | Docker | 8010 | https://fais.alphatronex.com (public demo; firms are on fais-clients) |
+| fais-app | Docker | 8010 | https://demo.faislaw.com (public demo; firms are on fais-clients). `faislaw.com` 302s here; `fais.alphatronex.com` and `alphatronex.fais.alphatronex.com` are 301 redirects |
 | fais-mongo | Docker | 27017 | internal only (compose network) |
 | fais-minio | Docker | 9000 | internal only (compose network) |
 | realdosing (static) | nginx (no container) | — | https://dosinghub.com |
