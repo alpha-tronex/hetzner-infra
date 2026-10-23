@@ -2,8 +2,11 @@
 # FAIS nightly backup: every FAIS MongoDB database, every MinIO document bucket, and the env and
 # credential files, into an encrypted restic repository on Backblaze B2.
 #
-# Installed at /opt/fais-backup/fais-backup.sh on the Hetzner VPS; run as alphathiam (docker group)
-# by fais-backup.service, fired nightly by fais-backup.timer. Source lives in hetzner-infra/backups/.
+# Installed at /opt/fais-backup/fais-backup.sh on both FAIS servers: the shared box (the demo,
+# restic host tag `fais`) and the client-data server fais-clients (firms, host tag `fais-clients`,
+# set by systemd/fais-backup.service.d/fais-clients.conf). Run as alphathiam (docker group) by
+# fais-backup.service, fired nightly by fais-backup.timer. Source lives in hetzner-infra/backups/.
+# Both servers share one restic repository; each only forgets and prunes its own host's snapshots.
 #
 # Files it reads on the server (all mode 600, never committed):
 #   ~/.fais-backup-b2.env           B2_ACCOUNT_ID, B2_ACCOUNT_KEY, B2_BUCKET (key limited to that bucket)
@@ -17,6 +20,7 @@ set -euo pipefail
 
 STAGE=/var/tmp/fais-backup
 LOG_TAG=fais-backup
+RESTIC_HOST="${FAIS_BACKUP_HOST:-fais}"
 
 alert() {
   # Best effort: a failed alert must not hide the original error.
@@ -75,7 +79,10 @@ docker cp fais-minio:/tmp/fais-backup-minio/. "$STAGE/minio/"
 docker exec fais-minio rm -rf /tmp/fais-backup-minio
 
 # --- Env and credential files (the restic repository is encrypted) -----------------------------
-cp -p /opt/fais/server/.env.production "$STAGE/config/server.env.production"
+# The demo's env file exists only on the shared box.
+if [ -f /opt/fais/server/.env.production ]; then
+  cp -p /opt/fais/server/.env.production "$STAGE/config/server.env.production"
+fi
 cp -p /opt/fais/minio/.env.production "$STAGE/config/minio.env.production"
 for f in /opt/fais/firms/*/.env.production; do
   [ -f "$f" ] && cp -p "$f" "$STAGE/config/firm-$(basename "$(dirname "$f")").env.production"
@@ -83,8 +90,8 @@ done
 cp -p "$HOME"/.fais-mongo-credentials "$HOME"/.fais-firm-*-credentials "$STAGE/config/" 2>/dev/null || true
 
 # --- Upload, then apply retention ---------------------------------------------------------------
-restic backup --quiet --host fais --tag nightly "$STAGE"
-restic forget --quiet --host fais --tag nightly --keep-daily 30 --keep-monthly 6 --prune
+restic backup --quiet --host "$RESTIC_HOST" --tag nightly "$STAGE"
+restic forget --quiet --host "$RESTIC_HOST" --tag nightly --keep-daily 30 --keep-monthly 6 --prune
 
 summary="mongo: $(du -h "$STAGE/mongo/fais-mongo.archive.gz" | cut -f1); buckets: ${buckets} ($(find "$STAGE/minio" -type f | wc -l) files); size: $(du -sh "$STAGE" | cut -f1)"
 rm -rf "$STAGE"
