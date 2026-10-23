@@ -164,8 +164,9 @@ every MinIO bucket, copies the env and credential files, and uploads them to an 
 repository `b2:faisdocs-backups:fais` (Backblaze B2, key limited to that bucket). It keeps 30 daily and 6 monthly snapshots. Any failure sends a Telegram alert through @alphatronexbot.
 Both servers share the repository, with their own restic host tag (`fais` here, `fais-clients` on
 the client-data server, set by [systemd/fais-backup.service.d/fais-clients.conf](./systemd/fais-backup.service.d/fais-clients.conf));
-each one's `forget --prune` only touches its own host's snapshots. Snapshot `9805beae` (host
-`fais`, 2026-10-23 16:47 UTC) is the last copy of the Alpha Tronex data from this box.
+each one's `forget --prune` only touches its own host's snapshots. Alpha Tronex's data is in the `fais-clients` snapshots from `87174954` (2026-10-23 16:48 UTC) on;
+the last copy taken on this box is `7d3f4fb7` (2026-10-22), expiring on the normal schedule. Running
+the job twice in a day keeps only the later snapshot for that day.
 - Server files (mode 600): `~/.fais-backup-b2.env`, `~/.fais-backup-alert.env`,
   `~/.fais-backup-restic-password`. **Keep a copy of the restic password off this server**
   (Vaultwarden runs here too); without it the backups can't be restored.
