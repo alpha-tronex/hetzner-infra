@@ -103,7 +103,7 @@ this repo only has the nginx vhosts. Since 2026-10-23 the demo is **demo.faislaw
 ([nginx/demo.faislaw.com.conf](./nginx/demo.faislaw.com.conf)); `faislaw.com` 302s to it until there's
 a landing page ([nginx/faislaw.com.conf](./nginx/faislaw.com.conf)), and the old `fais.alphatronex.com`
 301-redirects to it ([nginx/fais.alphatronex.com.conf](./nginx/fais.alphatronex.com.conf)). The demo's
-`APP_BASE_URL` is `https://demo.faislaw.com`. `www.faislaw.com` is pending a DNS fix (see the vhost header).
+`APP_BASE_URL` is `https://demo.faislaw.com`. `www.faislaw.com` shares the apex vhost and certificate.
 
 ```
 demo.faislaw.com
