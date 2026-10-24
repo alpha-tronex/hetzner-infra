@@ -266,6 +266,7 @@ at 07:30 UTC. Restore-tested 2026-10-23 (412 documents and 18 files matched live
 | Service | Runtime | Internal port | Public URL |
 |---------|---------|--------------|------------|
 | fais-alphatronex | Docker | 8011 | https://alphatronex.faislaw.com (Alpha Tronex, fictional test firm). The old `alphatronex.fais.alphatronex.com` is a 301 on the shared box, where its DNS record points |
+| fais-fiori | Docker | 8012 | https://fiori.faislaw.com (Law Office of Christophe Fiori, PLLC; onboarded 2026-10-23). Vhost [nginx/fiori.faislaw.com.conf](./nginx/fiori.faislaw.com.conf) |
 | fais-mongo | Docker | 27017 | internal only (compose network) |
 | fais-minio | Docker | 9000 | internal only (compose network) |
 
