@@ -143,7 +143,7 @@ build, testability audit). The `DEPLOY_SSH_KEY` key is forced to
 `~/.fais-mongo-credentials` and `~/.fais-firm-<firm>-credentials` (mode 600); URIs in each env
 file. For a shell: source the credentials file, then
 `docker exec -it fais-mongo mongosh -u faisRoot -p "$FAIS_ROOT_PW" --authenticationDatabase admin`.
-Plan and rollback: `FAIS/docs/MONGODB_AUTH_PLAN.md`. The old `fais` database is kept until
+Plan and rollback: `FAIS/docs/operations/MONGODB_AUTH_PLAN.md`. The old `fais` database is kept until
 about 2026-10-27, then dropped.
 
 **Firm deployments moved off this box (2026-10-23).** They run on the client-data server
@@ -192,7 +192,7 @@ the job twice in a day keeps only the later snapshot for that day.
 
 Added 2026-10-23 so client data no longer sits next to the public demo and unrelated apps. Runs **only**
 FAIS firm deployments with their own MongoDB and MinIO. Plan and cutover log:
-`FAIS/docs/CLIENT_DATA_SERVER_PLAN.md`.
+`FAIS/docs/operations/CLIENT_DATA_SERVER_PLAN.md`.
 
 | Spec | Value |
 |------|-------|
@@ -266,6 +266,7 @@ at 07:30 UTC. Restore-tested 2026-10-23 (412 documents and 18 files matched live
 | Service | Runtime | Internal port | Public URL |
 |---------|---------|--------------|------------|
 | fais-alphatronex | Docker | 8011 | https://alphatronex.faislaw.com (Alpha Tronex, fictional test firm). The old `alphatronex.fais.alphatronex.com` is a 301 on the shared box, where its DNS record points |
+| fais-fiori | Docker | 8012 | https://fiori.faislaw.com (Law Office of Christophe Fiori, PLLC; onboarded 2026-10-23). Vhost [nginx/fiori.faislaw.com.conf](./nginx/fiori.faislaw.com.conf) |
 | fais-mongo | Docker | 27017 | internal only (compose network) |
 | fais-minio | Docker | 9000 | internal only (compose network) |
 
