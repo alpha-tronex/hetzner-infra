@@ -104,6 +104,8 @@ this repo only has the nginx vhosts. Since 2026-10-23 the demo is **demo.faislaw
 a landing page ([nginx/faislaw.com.conf](./nginx/faislaw.com.conf)), and the old `fais.alphatronex.com`
 301-redirects to it ([nginx/fais.alphatronex.com.conf](./nginx/fais.alphatronex.com.conf)). The demo's
 `APP_BASE_URL` is `https://demo.faislaw.com`. `www.faislaw.com` shares the apex vhost and certificate.
+The dev box is **dev.faislaw.com** ([nginx/dev.faislaw.com.conf](./nginx/dev.faislaw.com.conf), since
+2026-10-28): basic auth (user `alpha`, `/etc/nginx/fais-dev.htpasswd`), certificate expires 2027-01-26.
 
 ```
 demo.faislaw.com
@@ -615,6 +617,7 @@ after it's enabled.
 | vaultwarden | Docker | 8200 | https://vault.alphatronex.com |
 | whatsapp-bridge | Node.js (host) | 3000 | internal only (172.17.0.1:3000) |
 | fais-app | Docker | 8010 | https://demo.faislaw.com (public demo; firms are on fais-clients). `faislaw.com` 302s here; `fais.alphatronex.com` and `alphatronex.fais.alphatronex.com` are 301 redirects |
+| fais-dev | Docker | 8030 | https://dev.faislaw.com (FAIS dev box: debug build, synthetic data, basic auth except `/api/health`; deployed from the `dev` branch out of `/opt/fais-dev`) |
 | fais-mongo | Docker | 27017 | internal only (compose network) |
 | fais-minio | Docker | 9000 | internal only (compose network) |
 | realdosing (static) | nginx (no container) | — | https://dosinghub.com |
