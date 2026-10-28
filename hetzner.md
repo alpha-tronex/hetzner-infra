@@ -210,12 +210,12 @@ FAIS firm deployments with their own MongoDB and MinIO. Plan and cutover log:
 (4 GB) before a second firm.**
 
 ```
-alphatronex.faislaw.com
-        │   nginx + Certbot (issued 2026-10-23, renews here)
+fiori.faislaw.com
+        │   nginx + Certbot (renews here)
         ▼
-  :8011 (Docker, 127.0.0.1 only)
+  :8012 (Docker, 127.0.0.1 only)
 ┌────────────────────┐      ┌────────────────────┐   ┌────────────────────┐
-│  fais-alphatronex   │◄────►│    fais-mongo      │   │    fais-minio      │
+│  fais-fiori         │◄────►│    fais-mongo      │   │    fais-minio      │
 │  same image as the  │      │ mongo:8.2.11       │   │ SSE-S3, own KMS key│
 │  demo, demo mode off│◄────►│ --auth             │   │ bucket per firm    │
 └────────────────────┘      └────────────────────┘   └────────────────────┘
@@ -263,11 +263,10 @@ health check on every firm port). `docker-buildx` is installed for the build sec
 **Backups.** Same script, units and B2 repository as the shared box, host tag `fais-clients`, nightly
 at 07:30 UTC. Restore-tested 2026-10-23 (412 documents and 18 files matched live).
 
-**Services**
+**Services** (port 8011 was the Alpha Tronex test firm, removed 2026-10-28; final backup is restic tag `alphatronex-final`)
 
 | Service | Runtime | Internal port | Public URL |
 |---------|---------|--------------|------------|
-| fais-alphatronex | Docker | 8011 | https://alphatronex.faislaw.com (Alpha Tronex, fictional test firm). The old `alphatronex.fais.alphatronex.com` is a 301 on the shared box, where its DNS record points |
 | fais-fiori | Docker | 8012 | https://fiori.faislaw.com (Law Office of Christophe Fiori, PLLC; onboarded 2026-10-23). Vhost [nginx/fiori.faislaw.com.conf](./nginx/fiori.faislaw.com.conf) |
 | fais-mongo | Docker | 27017 | internal only (compose network) |
 | fais-minio | Docker | 9000 | internal only (compose network) |
@@ -616,7 +615,7 @@ after it's enabled.
 | uptime-kuma | Docker | 3001 | https://status.alphatronex.com |
 | vaultwarden | Docker | 8200 | https://vault.alphatronex.com |
 | whatsapp-bridge | Node.js (host) | 3000 | internal only (172.17.0.1:3000) |
-| fais-app | Docker | 8010 | https://demo.faislaw.com (public demo; firms are on fais-clients). `faislaw.com` 302s here; `fais.alphatronex.com` and `alphatronex.fais.alphatronex.com` are 301 redirects |
+| fais-app | Docker | 8010 | https://demo.faislaw.com (public demo; firms are on fais-clients). `faislaw.com` 302s here; `fais.alphatronex.com` is a 301 redirect |
 | fais-dev | Docker | 8030 | https://dev.faislaw.com (FAIS dev box: debug build, synthetic data, basic auth except `/api/health`; deployed from the `dev` branch out of `/opt/fais-dev`) |
 | fais-mongo | Docker | 27017 | internal only (compose network) |
 | fais-minio | Docker | 9000 | internal only (compose network) |
