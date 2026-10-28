@@ -679,6 +679,5 @@ server/.env.production                  — secrets (JWT_SECRET); git-ignored, n
 | `172.17.0.1:3000` | WhatsApp bridge (Docker → host, local only) |
 | `geo.iproyal.com:12321` | WhatsApp bridge → residential proxy → WhatsApp (see note above; datacenter IP is blocked by WA directly) |
 | `s3.*.backblazeb2.com` | FAIS document storage (optional, if B2_* configured) |
-| `textract.*.amazonaws.com` | FAIS document OCR via Textract (optional, if DOCUMENT_INTAKE_TEXTRACT enabled) |
 | SMTP host (configurable) | FAIS invite + password-reset email (optional) |
 | `huggingface.co` | tts-service model download, first start only (cached in the `tts-models` volume afterwards) |
