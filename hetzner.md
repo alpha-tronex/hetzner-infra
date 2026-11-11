@@ -100,10 +100,12 @@ assistant.alphatronex   status.alphatronex   vault.alphatronex
 
 Migrated from Render (2026-07). Source + Dockerfile/compose live in the FAIS repo;
 this repo only has the nginx vhosts. Since 2026-10-23 the demo is **demo.faislaw.com**
-([nginx/demo.faislaw.com.conf](./nginx/demo.faislaw.com.conf)); `faislaw.com` 302s to it until there's
-a landing page ([nginx/faislaw.com.conf](./nginx/faislaw.com.conf)), and the old `fais.alphatronex.com`
+([nginx/demo.faislaw.com.conf](./nginx/demo.faislaw.com.conf)), and the old `fais.alphatronex.com`
 301-redirects to it ([nginx/fais.alphatronex.com.conf](./nginx/fais.alphatronex.com.conf)). The demo's
-`APP_BASE_URL` is `https://demo.faislaw.com`. `www.faislaw.com` shares the apex vhost and certificate.
+`APP_BASE_URL` is `https://demo.faislaw.com`. Since 2026-11-11 **www.faislaw.com** serves the product
+pages from the same container ([nginx/faislaw.com.conf](./nginx/faislaw.com.conf)), `faislaw.com`
+301s to www, and the FAIS client sends Client login and the app pages from www to demo.faislaw.com
+(`client/src/app/utils/marketing-host.ts`). Apex and www share one certificate.
 The dev box is **dev.faislaw.com** ([nginx/dev.faislaw.com.conf](./nginx/dev.faislaw.com.conf), since
 2026-10-28): basic auth (user `alpha`, `/etc/nginx/fais-dev.htpasswd`), certificate expires 2027-01-26.
 
@@ -615,7 +617,7 @@ after it's enabled.
 | uptime-kuma | Docker | 3001 | https://status.alphatronex.com |
 | vaultwarden | Docker | 8200 | https://vault.alphatronex.com |
 | whatsapp-bridge | Node.js (host) | 3000 | internal only (172.17.0.1:3000) |
-| fais-app | Docker | 8010 | https://demo.faislaw.com (public demo; firms are on fais-clients). `faislaw.com` 302s here; `fais.alphatronex.com` is a 301 redirect |
+| fais-app | Docker | 8010 | https://demo.faislaw.com (public demo; firms are on fais-clients). `www.faislaw.com` serves the product pages from here, `faislaw.com` 301s to www; `fais.alphatronex.com` is a 301 redirect |
 | fais-dev | Docker | 8030 | https://dev.faislaw.com (FAIS dev box: debug build, synthetic data, basic auth except `/api/health`; deployed from the `dev` branch out of `/opt/fais-dev`) |
 | fais-mongo | Docker | 27017 | internal only (compose network) |
 | fais-minio | Docker | 9000 | internal only (compose network) |
