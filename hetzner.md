@@ -588,6 +588,14 @@ now handles this itself (`whatsapp_service/lib/outage.js`):
 `/healthz` returns 200 even when disconnected, so any monitor must check for
 `"connected":true` in the body.
 
+**Log rotation (2026-11-19).** alphathiam's pm2 runs the `pm2-logrotate`
+module: logs in `~/.pm2/logs/` rotate at 10 MB and daily at midnight, are
+gzipped, and the newest 10 rotated files per log are kept. Before this the
+bridge's out/error logs had grown to about 26 MB. Settings live in pm2's
+module config (`pm2 conf pm2-logrotate`); change them with
+`pm2 set pm2-logrotate:<key> <value>` as alphathiam, never with sudo. Old
+logs: `zcat ~/.pm2/logs/whatsapp-bridge-out__*.log.gz | less`.
+
 **Deploying bridge code** (not covered by CI/CD):
 
 ```bash
