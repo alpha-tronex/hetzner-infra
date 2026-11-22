@@ -108,6 +108,12 @@ pages from the same container ([nginx/faislaw.com.conf](./nginx/faislaw.com.conf
 (`client/src/app/utils/marketing-host.ts`). Apex and www share one certificate.
 The dev box is **dev.faislaw.com** ([nginx/dev.faislaw.com.conf](./nginx/dev.faislaw.com.conf), since
 2026-10-28): basic auth (user `alpha`, `/etc/nginx/fais-dev.htpasswd`), certificate expires 2027-01-26.
+**Umami** (visitor analytics for www and the demo, since 2026-11-22) is **stats.faislaw.com**
+([nginx/stats.faislaw.com.conf](./nginx/stats.faislaw.com.conf)): Umami 3.4 and Postgres 17 from the
+FAIS repo's `docker-compose.analytics.yml` (compose project `fais-analytics`, run by hand from
+`/opt/fais`; `deploy.sh` doesn't touch it), host port 8040. Secrets in `/opt/fais/analytics/.env.production`
+(mode 600). Admin login with two-factor; password in Vaultwarden. Runbook: the FAIS repo's
+`docs/operations/WEB_ANALYTICS.md`.
 
 ```
 demo.faislaw.com
@@ -168,7 +174,8 @@ rotate it by editing the env file: objects encrypted under the old key would bec
 **Backups (2026-10-20; both servers since 2026-10-23):** on each FAIS server, `fais-backup.timer` runs `/opt/fais-backup/fais-backup.sh` (source:
 [backups/fais-backup.sh](./backups/fais-backup.sh)) nightly at 07:30 UTC, after the demo reset. It
 dumps the whole MongoDB server as `faisBackup` (all FAIS databases plus logins and roles), mirrors
-every MinIO bucket, copies the env and credential files, and uploads them to an encrypted restic
+every MinIO bucket, dumps Umami's Postgres database (shared box only, since 2026-11-22), copies the env
+and credential files, and uploads them to an encrypted restic
 repository `b2:faisdocs-backups:fais` (Backblaze B2, key limited to that bucket). It keeps 30 daily and 6 monthly snapshots. Any failure sends a Telegram alert through @alphatronexbot.
 Both servers share the repository, with their own restic host tag (`fais` here, `fais-clients` on
 the client-data server, set by [systemd/fais-backup.service.d/fais-clients.conf](./systemd/fais-backup.service.d/fais-clients.conf));
@@ -188,6 +195,7 @@ the job twice in a day keeps only the later snapshot for that day.
   # On fais-clients restore under /srv/fais-data (the encrypted volume), not /var/tmp.
   # One database:  mongorestore --archive=.../mongo/fais-mongo.archive.gz --gzip --nsInclude='fais_demo.*'
   # Documents:     mc mirror .../minio/<bucket> <alias>/<bucket>   (inside fais-minio)
+  # Umami:         docker exec -i fais-umami-db sh -c 'pg_restore -U "$POSTGRES_USER" -d "$POSTGRES_DB" --clean --if-exists' < .../umami/umami.pgdump
   ```
 
 ---
@@ -629,6 +637,8 @@ after it's enabled.
 | fais-dev | Docker | 8030 | https://dev.faislaw.com (FAIS dev box: debug build, synthetic data, basic auth except `/api/health`; deployed from the `dev` branch out of `/opt/fais-dev`) |
 | fais-mongo | Docker | 27017 | internal only (compose network) |
 | fais-minio | Docker | 9000 | internal only (compose network) |
+| fais-umami | Docker | 8040 | https://stats.faislaw.com (visitor analytics for www and the demo; own login with two-factor) |
+| fais-umami-db | Docker | 5432 | internal only (compose network) |
 | realdosing (static) | nginx (no container) | — | https://dosinghub.com |
 | dashboard (static) | nginx (no container) | — | https://dashboard.alphatronex.com (basic auth) |
 | quizmaster-app | Docker | 8020 | https://quizmaster.alphatronex.com |
