@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
-# FAIS nightly backup: every FAIS MongoDB database, every MinIO document bucket, and the env and
-# credential files, into an encrypted restic repository on Backblaze B2.
+# FAIS nightly backup: every FAIS MongoDB database, every MinIO document bucket, Umami's visitor
+# analytics database (shared box only), and the env and credential files, into an encrypted restic
+# repository on Backblaze B2.
 #
 # Installed at /opt/fais-backup/fais-backup.sh on both FAIS servers: the shared box (the demo,
 # restic host tag `fais`) and the client-data server fais-clients (firms, host tag `fais-clients`,
@@ -51,7 +52,7 @@ export RESTIC_REPOSITORY="b2:${B2_BUCKET}:fais"
 export RESTIC_PASSWORD_FILE="$HOME/.fais-backup-restic-password"
 
 rm -rf "$STAGE"
-mkdir -p "$STAGE/mongo" "$STAGE/minio" "$STAGE/config"
+mkdir -p "$STAGE/mongo" "$STAGE/minio" "$STAGE/umami" "$STAGE/config"
 chmod 700 "$STAGE"
 
 # --- MongoDB: the whole server in one gzip archive, dumped as faisBackup -----------------------
@@ -78,12 +79,24 @@ minio 'mc alias rm fbk >/dev/null'
 docker cp fais-minio:/tmp/fais-backup-minio/. "$STAGE/minio/"
 docker exec fais-minio rm -rf /tmp/fais-backup-minio
 
+# --- Umami: visitor analytics for www and the demo (docker-compose.analytics.yml in the FAIS repo) ---
+# Only the shared box runs it; fais-clients has no Umami and skips this. pg_dump runs inside the
+# container over its local socket, which needs no password. Custom format, so pg_restore can restore it.
+if docker ps --format '{{.Names}}' | grep -qx fais-umami-db; then
+  docker exec fais-umami-db sh -c 'pg_dump -U "$POSTGRES_USER" -d "$POSTGRES_DB" --format=custom' \
+    > "$STAGE/umami/umami.pgdump"
+fi
+
 # --- Env and credential files (the restic repository is encrypted) -----------------------------
 # The demo's env file exists only on the shared box.
 if [ -f /opt/fais/server/.env.production ]; then
   cp -p /opt/fais/server/.env.production "$STAGE/config/server.env.production"
 fi
 cp -p /opt/fais/minio/.env.production "$STAGE/config/minio.env.production"
+# Umami's database password, APP_SECRET and two-factor key (shared box only).
+if [ -f /opt/fais/analytics/.env.production ]; then
+  cp -p /opt/fais/analytics/.env.production "$STAGE/config/analytics.env.production"
+fi
 for f in /opt/fais/firms/*/.env.production; do
   [ -f "$f" ] && cp -p "$f" "$STAGE/config/firm-$(basename "$(dirname "$f")").env.production"
 done
@@ -93,7 +106,9 @@ cp -p "$HOME"/.fais-mongo-credentials "$HOME"/.fais-firm-*-credentials "$STAGE/c
 restic backup --quiet --host "$RESTIC_HOST" --tag nightly "$STAGE"
 restic forget --quiet --host "$RESTIC_HOST" --tag nightly --keep-daily 30 --keep-monthly 6 --prune
 
-summary="mongo: $(du -h "$STAGE/mongo/fais-mongo.archive.gz" | cut -f1); buckets: ${buckets} ($(find "$STAGE/minio" -type f | wc -l) files); size: $(du -sh "$STAGE" | cut -f1)"
+umami="none"
+if [ -f "$STAGE/umami/umami.pgdump" ]; then umami=$(du -h "$STAGE/umami/umami.pgdump" | cut -f1); fi
+summary="mongo: $(du -h "$STAGE/mongo/fais-mongo.archive.gz" | cut -f1); umami: ${umami}; buckets: ${buckets} ($(find "$STAGE/minio" -type f | wc -l) files); size: $(du -sh "$STAGE" | cut -f1)"
 rm -rf "$STAGE"
 logger -t "$LOG_TAG" "ok (${summary})"
 echo "FAIS backup ok (${summary})"
