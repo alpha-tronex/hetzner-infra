@@ -624,6 +624,16 @@ after it's enabled.
 
 ---
 
+## nginx compression (both servers)
+
+[nginx/conf.d/compression.conf](./nginx/conf.d/compression.conf) is installed at
+`/etc/nginx/conf.d/compression.conf` on the shared box and on fais-clients (since 2026-11-26). Ubuntu's
+`nginx.conf` turns `gzip on` but compresses only `text/html`, so before this the FAIS app's JavaScript and
+CSS went out uncompressed. Check a site with
+`curl -sI -H 'Accept-Encoding: gzip' https://www.faislaw.com/<a main-*.js from the page> | grep -i content-encoding`.
+
+---
+
 ## Services
 
 | Service | Runtime | Internal port | Public URL |
